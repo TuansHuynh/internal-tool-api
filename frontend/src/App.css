@@ -1,0 +1,17 @@
+/* App Component Specific Utility Styles */
+
+.cursor-pointer {
+  cursor: pointer;
+}
+
+.font-mono {
+  font-family: var(--font-mono);
+}
+
+.text-primary {
+  color: var(--color-primary);
+}
+
+.text-muted {
+  color: var(--text-muted);
+}
