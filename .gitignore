@@ -1,6 +1,7 @@
 build/bin
 node_modules
 frontend/dist
+dist/
 
 DACTA.md
 MOTA-ALL.md
