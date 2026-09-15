@@ -32,8 +32,8 @@ for (let i = 0; i < rawArgs.length; i++) {
 }
 
 // 1. Read current version: Priority 1: version.json, Priority 2: wails.json, Priority 3: package.json
-let currentVersion = '1.0.0';
-let currentAppName = 'internal-api-client';
+let currentVersion = '2.0.1';
+let currentAppName = 'Internal Tool API';
 
 if (fs.existsSync(VERSION_JSON_PATH)) {
   try {
@@ -85,8 +85,8 @@ function bumpSemver(versionStr, type) {
 }
 
 const newVersion = bumpSemver(currentVersion, bumpType);
-const newAppName = customName || currentAppName;
-const newOutputFileName = `${newAppName.toLowerCase().replace(/\s+/g, '-')}-v${newVersion}`;
+const newAppName = customName || 'Internal Tool API';
+const newOutputFileName = `Internal Tool API_v${newVersion}`;
 
 console.log('====================================================');
 console.log(`🚀 BUMP VERSION & APP NAME AUTOMATION TOOL`);

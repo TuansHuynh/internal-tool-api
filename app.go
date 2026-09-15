@@ -207,15 +207,10 @@ func (a *App) ApplyUpdate() error {
 	// Resolve the renamed executable destination (e.g., internal-api-client-v1.3.15.exe)
 	dir := filepath.Dir(exePath)
 	ext := filepath.Ext(exePath)
-	info := a.GetAppInfo()
-	appName := info.Name
-	if appName == "" {
-		appName = "internal-api-client"
-	}
 	cleanVer := strings.TrimPrefix(targetVer, "v")
 	var newTargetPath string
 	if cleanVer != "" {
-		newTargetName := fmt.Sprintf("%s-v%s%s", appName, cleanVer, ext)
+		newTargetName := fmt.Sprintf("Internal Tool API_v%s%s", cleanVer, ext)
 		newTargetPath = filepath.Join(dir, newTargetName)
 	} else {
 		newTargetPath = exePath

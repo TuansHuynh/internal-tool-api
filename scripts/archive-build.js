@@ -9,7 +9,7 @@ const RELEASES_DIR = path.join(ROOT_DIR, 'releases');
 
 // 1. Read current version
 let version = '2.0.1';
-let appName = 'internal-api-client';
+let appName = 'Internal Tool API';
 
 if (fs.existsSync(VERSION_JSON_PATH)) {
   try {
@@ -19,14 +19,16 @@ if (fs.existsSync(VERSION_JSON_PATH)) {
   } catch (err) {}
 }
 
-const versionTag = `v${version}`;
-const targetDir = path.join(RELEASES_DIR, versionTag);
+const majorNumber = version.split('.')[0] || '2';
+const majorFolder = `v${majorNumber}`;
+const subVersionFolder = `v${version}`;
+const targetDir = path.join(RELEASES_DIR, majorFolder, subVersionFolder);
 
-// Ensure releases and version-specific directory exists
+// Ensure major and subversion directory exists
 fs.mkdirSync(targetDir, { recursive: true });
 
 console.log('====================================================');
-console.log(`📦 ARCHIVING BUILD TO VERSION REPOSITORY: ${versionTag}`);
+console.log(`📦 ARCHIVING BUILD TO: releases/${majorFolder}/${subVersionFolder}`);
 console.log('====================================================');
 
 // 2. Find built executables in build/bin
@@ -35,9 +37,11 @@ if (fs.existsSync(BUILD_BIN_DIR)) {
   for (const file of files) {
     if (file.endsWith('.exe')) {
       const src = path.join(BUILD_BIN_DIR, file);
-      const dest = path.join(targetDir, file);
+      // Standardize output name to: Internal Tool API_v{version}.exe
+      const standardName = file === 'updater.exe' ? 'updater.exe' : `Internal Tool API_v${version}.exe`;
+      const dest = path.join(targetDir, standardName);
       fs.copyFileSync(src, dest);
-      console.log(`✅ Archived: releases/${versionTag}/${file}`);
+      console.log(`✅ Archived: releases/${majorFolder}/${subVersionFolder}/${standardName}`);
     }
   }
 }
@@ -46,18 +50,20 @@ if (fs.existsSync(BUILD_BIN_DIR)) {
 if (fs.existsSync(UPDATER_BIN_PATH)) {
   const updaterDest = path.join(targetDir, 'updater.exe');
   fs.copyFileSync(UPDATER_BIN_PATH, updaterDest);
-  console.log(`✅ Archived: releases/${versionTag}/updater.exe`);
+  console.log(`✅ Archived: releases/${majorFolder}/${subVersionFolder}/updater.exe`);
 }
 
 // 4. Save build metadata
 const metaPath = path.join(targetDir, 'metadata.json');
 const meta = {
-  appName,
-  version: versionTag,
+  appName: 'Internal Tool API',
+  majorVersion: majorFolder,
+  version: subVersionFolder,
+  executableName: `Internal Tool API_v${version}.exe`,
   archivedAt: new Date().toISOString(),
   files: fs.readdirSync(targetDir)
 };
 fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2) + '\n', 'utf8');
 
-console.log(`📂 Version archive preserved at: releases/${versionTag}/`);
+console.log(`📂 Version archive preserved at: releases/${majorFolder}/${subVersionFolder}/`);
 console.log('====================================================');

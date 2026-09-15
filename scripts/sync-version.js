@@ -8,8 +8,8 @@ const ROOT_PKG_PATH = path.join(ROOT_DIR, 'package.json');
 const VERSION_JSON_PATH = path.join(ROOT_DIR, 'version.json');
 
 // 1. Determine active version & app name from version.json (Priority 1) or wails.json
-let currentVersion = '1.3.3';
-let appName = 'internal-api-client';
+let currentVersion = '2.0.1';
+let appName = 'Internal Tool API';
 
 if (fs.existsSync(VERSION_JSON_PATH)) {
   try {
@@ -28,7 +28,7 @@ if (fs.existsSync(VERSION_JSON_PATH)) {
   } catch (e) {}
 }
 
-const outputFileName = `${appName.toLowerCase().replace(/\s+/g, '-')}-v${currentVersion}`;
+const outputFileName = `Internal Tool API_v${currentVersion}`;
 const buildTime = new Date().toISOString();
 
 // 2. Update version.json
