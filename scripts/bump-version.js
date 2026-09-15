@@ -7,6 +7,10 @@ const WAILS_CONFIG_PATH = path.join(ROOT_DIR, 'wails.json');
 const FRONTEND_PKG_PATH = path.join(ROOT_DIR, 'frontend', 'package.json');
 const ROOT_PKG_PATH = path.join(ROOT_DIR, 'package.json');
 const VERSION_JSON_PATH = path.join(ROOT_DIR, 'version.json');
+const LATEST_JSON_PATH = path.join(ROOT_DIR, 'latest.json');
+
+// GitHub repository for release download URLs
+const GITHUB_REPO = 'TuansHuynh/internal-tool-api';
 
 // Parse CLI arguments
 const rawArgs = process.argv.slice(2);
@@ -130,8 +134,43 @@ if (fs.existsSync(ROOT_PKG_PATH)) {
   console.log('✅ Updated package.json');
 }
 
-// 7. Optional Build
+// 7. Update latest.json (manifest template — SHA256 placeholders are filled by CI)
+const baseUrl = `https://github.com/${GITHUB_REPO}/releases/download/v${newVersion}`;
+const latestManifest = {
+  version: newVersion,
+  platforms: {
+    'windows-amd64': {
+      url: `${baseUrl}/${newAppName}-v${newVersion}.exe`,
+      sha256: 'PLACEHOLDER_WINDOWS_SHA256'
+    },
+    'linux-amd64': {
+      url: `${baseUrl}/${newAppName}-v${newVersion}`,
+      sha256: 'PLACEHOLDER_LINUX_SHA256'
+    },
+    'darwin-amd64': {
+      url: `${baseUrl}/${newAppName}-v${newVersion}-darwin-amd64`,
+      sha256: 'PLACEHOLDER_DARWIN_AMD64_SHA256'
+    },
+    'darwin-arm64': {
+      url: `${baseUrl}/${newAppName}-v${newVersion}-darwin-arm64`,
+      sha256: 'PLACEHOLDER_DARWIN_ARM64_SHA256'
+    }
+  }
+};
+fs.writeFileSync(LATEST_JSON_PATH, JSON.stringify(latestManifest, null, 2) + '\n', 'utf8');
+console.log('✅ Updated latest.json (SHA256 placeholders — CI will fill real values)');
+
+// 8. Optional Build
 if (doBuild) {
+  console.log('\n🔨 Building updater binary first...');
+  try {
+    execSync('go build -ldflags="-s -w" -o internal/updater/bin/updater.exe ./cmd/updater/', { stdio: 'inherit', cwd: ROOT_DIR });
+    console.log('✅ updater.exe built');
+  } catch (err) {
+    console.error('❌ updater build failed:', err.message);
+    process.exit(1);
+  }
+
   console.log('\n🔨 Building application binary with new version...');
   try {
     execSync('wails build', { stdio: 'inherit', cwd: ROOT_DIR });

@@ -1,0 +1,30 @@
+﻿# ── Git ─────────────────────────────────────────────────────────────────────
+.git
+.gitignore
+
+# ── Build output (tránh copy vào image) ─────────────────────────────────────
+build/bin
+
+# ── Node / Frontend cache ────────────────────────────────────────────────────
+node_modules
+frontend/node_modules
+frontend/dist
+
+# ── Go build cache ───────────────────────────────────────────────────────────
+vendor/
+
+# ── Tài liệu & file không cần cho build ─────────────────────────────────────
+README.md
+MOTA-ALL.md
+DACTA.md
+*.md
+
+# ── IDE & OS ─────────────────────────────────────────────────────────────────
+.vscode
+.idea
+*.DS_Store
+Thumbs.db
+
+# ── Secrets & local config ───────────────────────────────────────────────────
+.env
+.env.*

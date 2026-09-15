@@ -1,0 +1,62 @@
+﻿# =============================================================================
+# docker-compose.yml — Internal API Client (API Tester Pro)
+# Wrapper tiện lợi để chạy build trong Docker
+#
+# Cách dùng:
+#   docker compose run --rm build-linux    → Build cho Linux
+#   docker compose run --rm build-windows  → Build ra file .exe cho Windows
+#   docker compose run --rm shell          → Vào shell để debug
+#
+# Output sẽ được copy ra thư mục ./dist/ trên máy host sau khi build.
+# (Không dùng bind-mount trực tiếp vào build/bin để tránh lỗi unlinkat)
+# =============================================================================
+
+services:
+
+  # ── Build cho Linux (amd64) ─────────────────────────────────────────────────
+  build-linux:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: builder
+      args:
+        TARGET: linux
+    volumes:
+      # Mount thư mục output ra ./dist/ trên host
+      - ./dist:/output
+    command: >
+      sh -c "wails build -platform linux/amd64 &&
+             mkdir -p /output &&
+             cp -r /app/build/bin/. /output/ &&
+             echo '✅ Build Linux xong! Output: ./dist/'"
+
+  # ── Build cho Windows (cross-compile ra .exe) ────────────────────────────────
+  build-windows:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: builder
+      args:
+        TARGET: windows
+    volumes:
+      # Mount thư mục output ra ./dist/ trên host
+      - ./dist:/output
+    environment:
+      - CGO_ENABLED=0
+      - GOOS=windows
+      - GOARCH=amd64
+    command: >
+      sh -c "wails build -platform windows/amd64 -s &&
+             mkdir -p /output &&
+             cp -r /app/build/bin/. /output/ &&
+             echo '✅ Build Windows xong! Output: ./dist/internal-api-client-v1.3.3.exe'"
+
+  # ── Shell để debug môi trường build ─────────────────────────────────────────
+  shell:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: builder
+    entrypoint: /bin/bash
+    stdin_open: true
+    tty: true

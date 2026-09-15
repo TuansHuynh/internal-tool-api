@@ -5,7 +5,9 @@
   "private": true,
   "scripts": {
     "dev": "wails dev",
-    "build": "wails build",
+    "build:updater": "go build -ldflags=\"-s -w\" -o internal/updater/bin/updater.exe ./cmd/updater/",
+    "build": "npm run build:updater && wails build",
+    "build:full": "npm run build:updater && wails build",
     "sync": "node scripts/sync-version.js",
     "bump:patch": "node scripts/bump-version.js patch",
     "bump:minor": "node scripts/bump-version.js minor",
