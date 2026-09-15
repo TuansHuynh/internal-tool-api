@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useApp } from '../../context/AppContext';
 import { main } from '../../../wailsjs/go/models';
 import { GetAppInfo } from '../../../wailsjs/go/main/App';
+import appLogo from '../../assets/images/logo.png';
 
 interface SidebarProps {
   onOpenEnvModal?: () => void;
@@ -537,20 +538,16 @@ export default function Sidebar({ onOpenEnvModal }: SidebarProps) {
         background: '#0a0e17'
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            width: '24px',
-            height: '24px',
-            borderRadius: '6px',
-            background: 'linear-gradient(135deg, #38bdf8 0%, #6366f1 100%)',
-            color: '#0b0f17',
-            fontSize: '13px',
-            fontWeight: 800
-          }}>
-            ⚡
-          </span>
+          <img
+            src={appLogo}
+            alt="Logo"
+            style={{
+              width: '26px',
+              height: '26px',
+              borderRadius: '6px',
+              objectFit: 'contain'
+            }}
+          />
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px' }}>
             <span style={{ fontWeight: 700, fontSize: '13px', letterSpacing: '0.5px', color: '#f1f5f9' }}>
               API TESTER PRO

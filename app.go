@@ -9,7 +9,9 @@ import (
 	"internal-api-client/internal/updater"
 	"log"
 	"os"
+	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -68,10 +70,11 @@ type App struct {
 	dbManager *DBManager
 
 	// update download state
-	downloadMu      sync.Mutex
-	downloadPercent int64  // atomic, 0–100
-	downloadedPath  string // path of the fully downloaded & verified binary
-	downloadPhase   string // "idle" | "downloading" | "done" | "error"
+	downloadMu        sync.Mutex
+	downloadPercent   int64  // atomic, 0–100
+	downloadedPath    string // path of the fully downloaded & verified binary
+	downloadedVersion string // version string of the downloaded binary
+	downloadPhase     string // "idle" | "downloading" | "done" | "error"
 }
 
 func NewApp() *App {
@@ -134,6 +137,7 @@ func (a *App) StartDownloadUpdate(version, url, sha256 string) error {
 	dest := updater.DownloadDestination(version)
 	a.downloadPhase = "downloading"
 	a.downloadedPath = ""
+	a.downloadedVersion = version
 	atomic.StoreInt64(&a.downloadPercent, 0)
 	a.downloadMu.Unlock()
 
@@ -162,6 +166,7 @@ func (a *App) StartDownloadUpdate(version, url, sha256 string) error {
 
 		a.downloadPhase = "done"
 		a.downloadedPath = dest
+		a.downloadedVersion = version
 		a.emitUpdateStatus(UpdateStatus{Phase: "done", Percent: 100})
 		log.Printf("[app] download complete → %s", dest)
 	}()
@@ -187,6 +192,7 @@ func (a *App) ApplyUpdate() error {
 	a.downloadMu.Lock()
 	phase := a.downloadPhase
 	src := a.downloadedPath
+	targetVer := a.downloadedVersion
 	a.downloadMu.Unlock()
 
 	if phase != "done" || src == "" {
@@ -198,6 +204,23 @@ func (a *App) ApplyUpdate() error {
 		return fmt.Errorf("resolve current executable: %w", err)
 	}
 
+	// Resolve the renamed executable destination (e.g., internal-api-client-v1.3.15.exe)
+	dir := filepath.Dir(exePath)
+	ext := filepath.Ext(exePath)
+	info := a.GetAppInfo()
+	appName := info.Name
+	if appName == "" {
+		appName = "internal-api-client"
+	}
+	cleanVer := strings.TrimPrefix(targetVer, "v")
+	var newTargetPath string
+	if cleanVer != "" {
+		newTargetName := fmt.Sprintf("%s-v%s%s", appName, cleanVer, ext)
+		newTargetPath = filepath.Join(dir, newTargetName)
+	} else {
+		newTargetPath = exePath
+	}
+
 	binary := getUpdaterBinary()
 	// In dev builds the stub is just a text placeholder (<100 bytes).
 	if len(binary) < 1024 {
@@ -205,11 +228,11 @@ func (a *App) ApplyUpdate() error {
 	}
 
 	pid := os.Getpid()
-	if err = updater.LaunchUpdaterProcess(binary, pid, src, exePath); err != nil {
+	if err = updater.LaunchUpdaterProcess(binary, pid, src, exePath, newTargetPath); err != nil {
 		return fmt.Errorf("launch updater: %w", err)
 	}
 
-	log.Printf("[app] updater launched — quitting (PID=%d)", pid)
+	log.Printf("[app] updater launched (replacing %s with %s) — quitting (PID=%d)", exePath, newTargetPath, pid)
 	wailsRuntime.Quit(a.ctx)
 	return nil
 }

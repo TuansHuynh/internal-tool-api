@@ -19,13 +19,19 @@ func main() {
 	pid := flag.Int("pid", 0, "PID of the application to wait for")
 	source := flag.String("source", "", "Path to the downloaded new binary")
 	target := flag.String("target", "", "Path to the current application executable")
+	newTarget := flag.String("new-target", "", "Path to the new renamed executable file (optional, defaults to target)")
 	flag.Parse()
 
 	if *pid == 0 || *source == "" || *target == "" {
 		log.Fatal("[updater] missing required flags: --pid, --source, --target")
 	}
 
-	logf("[updater] starting — waiting for app PID=%d to exit", *pid)
+	finalTarget := *target
+	if *newTarget != "" {
+		finalTarget = *newTarget
+	}
+
+	logf("[updater] starting — waiting for app PID=%d to exit (target=%s, newTarget=%s)", *pid, *target, finalTarget)
 
 	// ── Step 1: Wait for the application to exit ────────────────────────────
 	if err := waitForProcessExitFn(*pid, 60*time.Second); err != nil {
@@ -46,34 +52,54 @@ func main() {
 		os.Exit(1)
 	}
 
-	// ── Step 3: Replace binary ───────────────────────────────────────────────
-	logf("[updater] replacing %s with %s", *target, *source)
-	if err := replaceFile(*source, *target); err != nil {
-		logf("[updater] ERROR: replace failed: %v — rolling back", err)
+	// ── Step 3: Replace / Write new binary ───────────────────────────────────
+	logf("[updater] installing new binary to %s (from %s)", finalTarget, *source)
+	if err := replaceFile(*source, finalTarget); err != nil {
+		logf("[updater] ERROR: install failed: %v — rolling back", err)
+		if finalTarget != *target {
+			_ = os.Remove(finalTarget)
+		}
 		rollback(backup, *target)
 		os.Exit(1)
 	}
 
+	// If renamed, remove the old version binary (with retries if locked)
+	if finalTarget != *target {
+		logf("[updater] removing old binary: %s", *target)
+		for attempt := 1; attempt <= 10; attempt++ {
+			if err := os.Remove(*target); err == nil || os.IsNotExist(err) {
+				break
+			}
+			time.Sleep(200 * time.Millisecond)
+		}
+	}
+
 	// ── Step 4: Verify new binary ────────────────────────────────────────────
-	fi, err := os.Stat(*target)
+	fi, err := os.Stat(finalTarget)
 	if err != nil || fi.Size() == 0 {
-		logf("[updater] ERROR: target file invalid after replace — rolling back")
+		logf("[updater] ERROR: target file invalid after install — rolling back")
+		if finalTarget != *target {
+			_ = os.Remove(finalTarget)
+		}
 		rollback(backup, *target)
 		os.Exit(1)
 	}
 
 	// ── Step 5: Set executable permission (Linux/macOS) ──────────────────────
 	if runtime.GOOS != "windows" {
-		if err = os.Chmod(*target, 0o755); err != nil {
-			logf("[updater] WARNING: chmod %s: %v", *target, err)
+		if err = os.Chmod(finalTarget, 0o755); err != nil {
+			logf("[updater] WARNING: chmod %s: %v", finalTarget, err)
 		}
 	}
 
 	// ── Step 6: Restart application ──────────────────────────────────────────
-	logf("[updater] launching updated app: %s", *target)
-	cmd := exec.Command(*target)
+	logf("[updater] launching updated app: %s", finalTarget)
+	cmd := exec.Command(finalTarget)
 	if err = cmd.Start(); err != nil {
 		logf("[updater] ERROR: could not start new app: %v — rolling back", err)
+		if finalTarget != *target {
+			_ = os.Remove(finalTarget)
+		}
 		rollback(backup, *target)
 		os.Exit(1)
 	}

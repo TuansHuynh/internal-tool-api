@@ -85,7 +85,8 @@ func NewDownloadClient() *http.Client {
 //   - appPID:      PID of the running application process (to wait for exit)
 //   - sourcePath:  path to the downloaded new binary
 //   - targetPath:  path to the current application executable
-func LaunchUpdaterProcess(updaterData []byte, appPID int, sourcePath, targetPath string) error {
+//   - newTargetPath: path to the new renamed application executable
+func LaunchUpdaterProcess(updaterData []byte, appPID int, sourcePath, targetPath, newTargetPath string) error {
 	// Write updater binary to a temp file.
 	updaterPath, err := extractUpdater(updaterData)
 	if err != nil {
@@ -97,12 +98,16 @@ func LaunchUpdaterProcess(updaterData []byte, appPID int, sourcePath, targetPath
 		return fmt.Errorf("chmod updater: %w", err)
 	}
 
-	cmd := exec.Command(
-		updaterPath,
+	args := []string{
 		"--pid", fmt.Sprintf("%d", appPID),
 		"--source", sourcePath,
 		"--target", targetPath,
-	)
+	}
+	if newTargetPath != "" && newTargetPath != targetPath {
+		args = append(args, "--new-target", newTargetPath)
+	}
+
+	cmd := exec.Command(updaterPath, args...)
 	// Detach from the current process so it survives after the app exits.
 	setSysProcAttr(cmd)
 
@@ -110,7 +115,7 @@ func LaunchUpdaterProcess(updaterData []byte, appPID int, sourcePath, targetPath
 		return fmt.Errorf("start updater process: %w", err)
 	}
 
-	log.Printf("[updater] launched updater PID=%d → waiting to replace %s", cmd.Process.Pid, targetPath)
+	log.Printf("[updater] launched updater PID=%d → replacing %s (newTarget=%s)", cmd.Process.Pid, targetPath, newTargetPath)
 	return nil
 }
 
