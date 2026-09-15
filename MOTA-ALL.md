@@ -192,3 +192,13 @@ npm run release
 node scripts/bump-version.js patch --build
 ```
 
+```bash
+# 2. Commit + tag + push
+git add .
+
+git commit -m "chore: release v1.3.4"
+
+git tag v1.3.4
+
+git push origin master --tags
+```
