@@ -1,155 +1,364 @@
-# TÀI LIỆU ĐẶC TẢ VÀ HƯỚNG DẪN SỬ DỤNG - INTERNAL API CLIENT
+﻿# Internal API Client — API Tester Pro
 
-## 1. Giới thiệu chung
-**Internal API Client** là một ứng dụng máy tính (Desktop Application) nhẹ, hiệu năng cao, được thiết kế để quản lý và kiểm thử các API HTTP. Ứng dụng này giúp lập trình viên gửi các yêu cầu HTTP (API Requests), quản lý tài nguyên theo Dự án (Projects) / Thư mục (Folders), quản lý các biến môi trường (Environment Variables) và đặc biệt tích hợp công cụ kiểm thử hiệu năng / đo tải hệ thống (Stress/Load Testing) bằng cơ chế song song (Goroutines) mạnh mẽ của ngôn ngữ Go.
+> **Ứng dụng Desktop kiểm thử & đo tải RESTful API** được xây dựng trên kiến trúc hiện đại **Go + React 18 + Wails v2**, hướng đến trải nghiệm IDE chuẩn Postman / Insomnia.
 
-## 2. Thông tin tác giả
-- **Tác giả:**  Huỳnh Tuấn (Tunas)
-- **Email:** tuanhuynh170424@gmail.com
-- **Phiên bản:** `v1.3.1`
+<p align="center">
+  <img src="https://img.shields.io/badge/version-v1.3.3-blue?style=for-the-badge" alt="version"/>
+  <img src="https://img.shields.io/badge/Go-1.25.0-00ADD8?style=for-the-badge&logo=go" alt="go"/>
+  <img src="https://img.shields.io/badge/Wails-v2.12.0-red?style=for-the-badge" alt="wails"/>
+  <img src="https://img.shields.io/badge/React-18-61DAFB?style=for-the-badge&logo=react" alt="react"/>
+  <img src="https://img.shields.io/badge/TypeScript-5-3178C6?style=for-the-badge&logo=typescript" alt="typescript"/>
+  <img src="https://img.shields.io/badge/SQLite-pure_Go-003B57?style=for-the-badge&logo=sqlite" alt="sqlite"/>
+</p>
 
-## 3. Kiến trúc & Công nghệ (Tech Stack)
-Ứng dụng được xây dựng trên mô hình kết hợp giữa giao diện web hiện đại và hiệu năng backend mạnh mẽ của Go:
+---
 
-### Backend (Go 1.25.0)
-- **Framework:** **Wails v2** (`v2.12.0`) - Hỗ trợ liên kết trực tiếp (Binding) mã nguồn Go với giao diện frontend thông qua giao thức IPC siêu nhẹ.
-- **Engine HTTP:** Tự xây dựng trong thư viện [core/client.go](file:///c:/Users/nkocn/OneDrive/Desktop/Plan/internal-tool/internal-api-client/core/client.go), sử dụng `net/http` tiêu chuẩn của Go kết hợp với cấu hình `http.Transport` tối ưu (hỗ trợ bỏ qua kiểm tra chứng chỉ SSL/TLS không an toàn, tuỳ chỉnh Timeout, Header mặc định và đo lường kích thước/thời gian phản hồi chuẩn xác).
-- **Stress Test Engine:** Tận dụng cơ chế **Goroutines** và **Channels** của Go để giả lập hàng trăm/hàng nghìn yêu cầu đồng thời (Concurrency) gửi đến server đích mà không làm treo UI, tính toán thời gian phản hồi trung bình và tỷ lệ thành công/thất bại chính xác.
-- **Database:** **SQLite** sử dụng driver **`modernc.org/sqlite`** (phiên bản SQLite viết 100% bằng Go, không cần CGO, giúp quá trình cài đặt và biên dịch trên mọi hệ điều hành vô cùng đơn giản và không phụ thuộc vào GCC/mingw).
+## 📖 Mục lục
 
-### Frontend (React + TypeScript)
-- **Bộ dựng dự án:** **Vite** (nhanh và tối ưu hóa tốt).
-- **Ngôn ngữ:** **TypeScript** giúp kiểm soát chặt chẽ kiểu dữ liệu.
-- **UI Framework:** **React 18** sử dụng cấu trúc Context API (`AppContext`) quản lý trạng thái tập trung (Tab hoạt động, danh sách Projects, Biến môi trường, Lịch sử request và Kết quả Stress Test).
-- **Code Editor:** **`@monaco-editor/react`** mang lại trải nghiệm viết Body (JSON/Text) và xem phản hồi giống như Visual Studio Code, hỗ trợ highlight cú pháp chuyên nghiệp.
+1. [Giới thiệu](#1-giới-thiệu)
+2. [Thông tin dự án](#2-thông-tin-dự-án)
+3. [Kiến trúc hệ thống](#3-kiến-trúc-hệ-thống)
+4. [Tech Stack](#4-tech-stack)
+5. [Tính năng](#5-tính-năng)
+6. [Cấu trúc thư mục](#6-cấu-trúc-thư-mục)
+7. [Cài đặt & Chạy ứng dụng](#7-cài-đặt--chạy-ứng-dụng)
+8. [Version Automation](#8-version-automation)
+9. [Hướng dẫn sử dụng](#9-hướng-dẫn-sử-dụng)
+10. [Bảo trì & Phát triển](#10-bảo-trì--phát-triển)
 
-### Cơ sở dữ liệu (SQLite Schema)
-Dữ liệu dự án được lưu cục bộ tại máy tính của người dùng tại đường dẫn:
+---
+
+## 1. Giới thiệu
+
+**Internal API Client** (API Tester Pro v2.0) là ứng dụng Desktop hiệu năng cao chuyên biệt cho việc **kiểm thử, quản lý và đo tải (Load & Stress Testing)** các hệ thống RESTful API.
+
+Điểm khác biệt cốt lõi so với các công cụ tương tự:
+
+- 🚀 **Backend Go thuần túy** — Engine HTTP tự xây dựng với `net/http/httptrace`, bóc tách chi tiết từng giai đoạn mạng (DNS → TCP → TLS → TTFB → Download).
+- ⚡ **Goroutine Stress Test** — Tận dụng đa luồng bất đồng bộ của Go để giả lập hàng nghìn request/giây với nút hủy tức thì.
+- 💾 **Embedded SQLite (pure Go)** — Lưu trữ vĩnh viễn Projects, Folders, Requests, Environments mà không cần CGO hay GCC.
+- 🎨 **Dark IDE Experience** — Monaco Editor, tab kéo thả, splitter co dãn, phím tắt toàn cục.
+
+---
+
+## 2. Thông tin dự án
+
+| Trường | Giá trị |
+|---|---|
+| **Tác giả** | Huỳnh Tuấn (Tunas) |
+| **Email** | tuanhuynh170424@gmail.com |
+| **Phiên bản** | `v1.3.3` |
+| **Build date** | 2026-09-14 |
+| **Repository** | https://github.com/TuansHuynh/internal-tool-api |
+| **License** | MIT |
+
+---
+
+## 3. Kiến trúc hệ thống
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│              TẦNG GIAO DIỆN (React 18 + TypeScript + Vite)      │
+│                                                                 │
+│  MainLayout ──► Sidebar ──► RequestPanel ──► ResponsePanel      │
+│       │                                                         │
+│  AppContext ◄── StressTestModal ── EnvironmentModal             │
+│       │                                                         │
+│  curlParser.ts (Import cURL / Code Generator)                   │
+└─────────────────────────┬───────────────────────────────────────┘
+                          │  Wails IPC Bridge (wailsjs/go/main/App)
+┌─────────────────────────▼───────────────────────────────────────┐
+│                   TẦNG BACKEND (Go 1.25.0)                      │
+│                                                                 │
+│  app.go (IPC Controller)                                        │
+│     ├── core/client.go  ──► HTTP Engine + httptrace Timing      │
+│     ├── core/client.go  ──► Goroutine Stress Engine + Cancel    │
+│     └── db.go           ──► SQLite DBManager (Auto-migration)   │
+│                                   │                             │
+│                         api_client.db (SQLite local)            │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 4. Tech Stack
+
+### Backend
+
+| Thành phần | Công nghệ | Phiên bản |
+|---|---|---|
+| Ngôn ngữ | Go | 1.25.0 |
+| Desktop Framework | Wails v2 | v2.12.0 |
+| Database Driver | modernc.org/sqlite (pure Go, no CGO) | v1.53.0 |
+| HTTP Tracing | net/http/httptrace | stdlib |
+| Concurrency | Goroutines + Channels + context.Cancel | stdlib |
+
+### Frontend
+
+| Thành phần | Công nghệ | Phiên bản |
+|---|---|---|
+| Framework | React | 18 |
+| Ngôn ngữ | TypeScript | 5 |
+| Bundler | Vite | latest |
+| Code Editor | @monaco-editor/react | latest |
+| State Management | React Context API (AppContext) | — |
+
+---
+
+## 5. Tính năng
+
+### 🌐 HTTP Client Engine
+
+- **Phương thức:** `GET`, `POST`, `PUT`, `DELETE`, `PATCH`, `HEAD`, `OPTIONS`
+- **Cấu hình URL:** Base URL + Port động (bật/tắt) + Endpoint Path
+- **Query Params 2 chiều:** Bảng Key-Value tự đồng bộ với thanh Omnibar (gõ `?key=val` → bảng cập nhật; sửa bảng → URL cập nhật)
+- **Headers:** Bảng Key-Value có checkbox bật/tắt từng header riêng lẻ
+
+### 🔐 Xác thực đa dạng (Multi-Auth)
+
+| Loại Auth | Mô tả |
+|---|---|
+| **No Auth** | Không xác thực |
+| **Bearer Token** | Hỗ trợ token hoặc `{{token}}` kèm JWT Inspector giải mã claims và kiểm tra thời hạn |
+| **Basic Auth** | Nhập Username & Password, tự động mã hóa Base64 → `Authorization: Basic ...` |
+| **API Key** | Tên key + giá trị, tùy chọn gắn vào Header hoặc Query Params |
+
+### 📦 Body Types
+
+| Loại | Mô tả |
+|---|---|
+| **JSON** | Monaco Editor với nút `✨ Format JSON` (Beautifier) |
+| **Raw** | Monaco Editor hỗ trợ plaintext / XML |
+| **x-www-form-urlencoded** | Bảng Key-Value, tự động gán `Content-Type` tương ứng |
+| **None** | Không gửi body |
+
+### 📡 Network Timing Breakdown
+
+Phân tích chi tiết độ trễ mạng qua `net/http/httptrace`:
+
+| Pha | Mô tả |
+|---|---|
+| **DNS Lookup** | Thời gian phân giải tên miền |
+| **TCP Connect** | Thời gian thiết lập kết nối TCP |
+| **TLS Handshake** | Thời gian bắt tay SSL/TLS |
+| **TTFB** | Time to First Byte — từ khi gửi đến byte phản hồi đầu tiên |
+| **Content Download** | Thời gian đọc body response |
+| **Total** | Tổng thời gian hoàn thành request |
+
+### ⚡ Goroutine Stress / Load Testing
+
+- Cấu hình **VUs (Virtual Users)** và **Total Requests**
+- Metrics real-time: **RPS (Throughput)**, **Average Latency**, **Success Rate**, **Error Count**
+- **Nút "🛑 Dừng Đo Tải"** — hủy toàn bộ Goroutine an toàn qua `context.CancelFunc`
+
+### 📥 Import / Export & Code Generator
+
+- **Import cURL:** Dán lệnh `curl ...` → tự động điền Method, URL, Headers, Body, Auth
+- **Export cURL:** 1 click copy request hiện tại thành lệnh `curl` chạy được trong Terminal
+- **Code Snippets Generator** (6 ngôn ngữ):
+  - `cURL` · `JavaScript Fetch` · `Axios` · `Python Requests` · `Go net/http` · `Node.js https`
+
+### 💾 SQLite — Lưu trữ vĩnh viễn
+
+Dữ liệu lưu tại máy cục bộ:
+
 - **Windows:** `%APPDATA%\internal-api-client\api_client.db`
 - **macOS / Linux:** `~/.config/internal-api-client/api_client.db`
 
-Cấu trúc gồm 3 bảng chính (khởi tạo tại [db.go](file:///c:/Users/nkocn/OneDrive/Desktop/Plan/internal-tool/internal-api-client/db.go)):
-1. `projects`: Lưu trữ thông tin dự án (`id`, `name`).
-2. `folders`: Quản lý cấu trúc thư mục phân cấp (`id`, `project_id`, `parent_id`, `name`).
-3. `requests`: Lưu trữ thông tin chi tiết từng API Request (`id`, `project_id`, `folder_id`, `name`, `method`, `base_url`, `port`, `use_port`, `api_path`, `req_body`, `headers_json`).
+Schema tự động migration gồm: `projects` · `folders` · `requests` · `environments` · `env_variables`
+
+### 🌍 Biến môi trường (Environment Variables)
+
+- Quản lý nhiều môi trường (Local, Dev, Staging, Production)
+- Cú pháp `{{variable}}` dùng trong URL, Headers, Body, Auth
+- Duplicate môi trường, Export JSON
+- Lưu vĩnh viễn vào SQLite (không mất dữ liệu khi restart)
+
+### ⌨️ Phím tắt toàn cục
+
+| Phím tắt | Hành động |
+|---|---|
+| `Ctrl + Enter` | Gửi request ngay lập tức |
+| `Ctrl + T` | Mở Tab Request mới |
+| `Ctrl + W` | Đóng Tab hiện tại |
+
+### 🗂️ Sidebar & Collections
+
+- Cây phân cấp: **Project → Folder → Request**
+- Tab **History** theo dõi lịch sử các request đã gửi
+- Thanh Search nhanh
+- Import / Export JSON tương thích định dạng Postman Workspace
 
 ---
 
-## 4. Cấu trúc thư mục dự án
-
-Cấu trúc cây thư mục của dự án **Internal API Client** được tổ chức như sau:
+## 6. Cấu trúc thư mục
 
 ```text
 internal-api-client/
-├── build/                # Chứa các file build, icon và cấu hình cho từng nền tảng (Windows, macOS)
-│   ├── bin/              # Chứa file thực thi sau khi build hoàn tất (.exe, .app)
-│   ├── darwin/           # Các file cấu hình riêng cho hệ điều hành macOS (Info.plist)
-│   └── windows/          # Các file cấu hình và manifest cho hệ điều hành Windows
-├── core/                 # Thư viện core xử lý logic nghiệp vụ bằng Go
-│   ├── client.go         # Định nghĩa cấu trúc dữ liệu Request/Response, client HTTP và stress test engine
-│   ├── models.go         # Khai báo package core, chưa có code
-│   └── stress_test.go    # Khai báo package core, chưa có code
-├── frontend/             # Chứa toàn bộ mã nguồn giao diện (React + TypeScript + Vite)
-│   ├── dist/             # Tài nguyên frontend được biên dịch (HTML/JS/CSS), Go tự động embed vào file thực thi
-│   ├── src/              # Mã nguồn React
-│   │   ├── assets/       # Tài nguyên tĩnh (ảnh, logo...)
-│   │   ├── components/   # Các UI Component chính (Sidebar, RequestPanel, ResponsePanel, common)
-│   │   ├── context/      # React Context (AppContext.tsx) quản lý state và IPC của ứng dụng
-│   │   ├── hooks/        # Các custom hooks của React
-│   │   ├── layouts/      # Bố cục giao diện chính
-│   │   └── pages/        # Trang giao diện chính (Workspace.tsx)
-│   ├── index.html        # File template HTML chính cho frontend
-│   ├── package.json      # Quản lý dependency và script chạy của frontend (React, Monaco Editor)
-│   ├── tsconfig.json     # Cấu hình TypeScript
-│   └── vite.config.ts    # Cấu hình build Vite
-├── app.go                # Tầng API kết nối (Binding) giữa frontend React và backend Go, xử lý DB & Client
-├── db.go                 # Quản lý SQLite database (InitDB, các phương thức CRUD Project, Folder, Request)
-├── go.mod / go.sum       # Quản lý các dependencies của backend Go (modernc.org/sqlite, wails)
-├── main.go               # Hàm khởi chạy ứng dụng (main entry), cấu hình cửa sổ ứng dụng và đăng ký các binding
-├── wails.json            # Cấu hình chung của dự án Wails (tên, file output, lệnh build frontend)
-└── README.md             # Tài liệu hướng dẫn sử dụng và đặc tả dự án
+├── build/                          # Cấu hình icon, metadata và binary output
+│   └── bin/                        # File thực thi production (.exe)
+├── core/
+│   └── client.go                   # HTTP Engine + httptrace + Goroutine Stress Test + Cancel
+├── frontend/
+│   ├── src/
+│   │   ├── components/
+│   │   │   ├── EnvironmentModal/   # Modal quản lý biến môi trường (SQLite-backed)
+│   │   │   ├── RequestPanel/       # Omnibar, Params 2-way, Headers, Body, Auth, cURL, CodeGen
+│   │   │   ├── ResponsePanel/      # Status, Timing Breakdown, Pretty/Raw/HTML Preview
+│   │   │   ├── Sidebar/            # Collections Tree, History, Search, Import/Export JSON
+│   │   │   ├── StressTestModal/    # Console đo tải real-time + nút Cancel
+│   │   │   └── common/             # Button, Modal — UI primitives tái sử dụng
+│   │   ├── context/
+│   │   │   └── AppContext.tsx      # State trung tâm, Auto-Save, Global Keybindings
+│   │   ├── layouts/
+│   │   │   └── MainLayout.tsx      # Edge-to-edge IDE (Sidebar 280px + Workspace)
+│   │   ├── pages/
+│   │   │   └── Workspace/          # Tab bar Postman-style, Vertical Splitter
+│   │   ├── utils/
+│   │   │   └── curlParser.ts       # Parser cURL & Code Generator đa ngôn ngữ
+│   │   ├── App.tsx                 # Root — bọc AppProvider & MainLayout
+│   │   ├── main.tsx                # React DOM entry point
+│   │   └── style.css               # Design tokens, Dark theme, typography, scrollbar
+│   ├── wailsjs/                    # Go → TypeScript bindings (tự động sinh bởi Wails)
+│   │   ├── go/main/App.js          # JS bindings
+│   │   ├── go/main/App.d.ts        # TypeScript types
+│   │   └── go/models.ts            # Shared model types
+│   ├── package.json
+│   └── vite.config.ts
+├── scripts/
+│   ├── bump-version.js             # SemVer automation (patch/minor/major + build)
+│   └── sync-version.js             # Đồng bộ version qua các file config
+├── app.go                          # IPC Controller — kết nối Frontend ↔ Core Engine ↔ DB
+├── db.go                           # SQLite DBManager — Auto-migration, CRUD toàn bộ entities
+├── main.go                         # Entry point — khởi động Wails window
+├── go.mod / go.sum                 # Go module dependencies
+├── wails.json                      # Cấu hình Wails project
+├── package.json                    # npm scripts (bump:patch, bump:minor, release...)
+├── version.json                    # Single source of truth cho version metadata
+├── MOTA-ALL.md                     # Tài liệu kiến trúc chi tiết đầy đủ
+└── README.md                       # Tài liệu này
 ```
 
 ---
 
-## 5. Cách cài đặt & Chạy ứng dụng
+## 7. Cài đặt & Chạy ứng dụng
 
-### Yêu cầu tiên quyết (Prerequisites)
-Để cài đặt và biên dịch dự án, máy tính của bạn cần cài đặt sẵn:
-1. **Go:** Phiên bản `1.18` trở lên (Khuyến nghị sử dụng Go `1.25.0`).
-2. **Node.js & npm:** Phiên bản LTS (`v16` hoặc mới hơn).
-3. **Wails CLI:** Cài đặt bằng cách chạy lệnh sau trên Terminal/PowerShell:
-   ```bash
-   go install github.com/wailsapp/wails/v2/cmd/wails@latest
-   ```
+### Yêu cầu tiên quyết
 
-### Cài đặt môi trường phát triển (Development)
-1. **Clone mã nguồn dự án về máy.**
-2. **Di chuyển vào thư mục gốc của dự án.**
-3. **Chạy ứng dụng trong chế độ Development:**
-   ```bash
-   wails dev
-   ```
-   *Lưu ý:* Lệnh này sẽ tự động cài đặt các thư viện npm ở frontend (thông qua lệnh `npm install`), biên dịch backend Go và khởi chạy một cửa sổ ứng dụng desktop kèm tính năng Live Reload (Hot Reload). Mọi thay đổi ở cả Go và React sẽ được áp dụng ngay lập tức.
+| Công cụ | Phiên bản tối thiểu | Cài đặt |
+|---|---|---|
+| **Go** | 1.21+ (khuyến nghị 1.25.0) | https://go.dev/dl |
+| **Node.js** | 16 LTS+ | https://nodejs.org |
+| **Wails CLI** | v2.x | `go install github.com/wailsapp/wails/v2/cmd/wails@latest` |
 
-### Biên dịch bản phân phối (Build Production)
-Để tạo ra file thực thi chạy độc lập (`.exe` trên Windows, `.app` trên macOS):
-Chạy lệnh biên dịch sau tại thư mục gốc:
+> **Lưu ý:** Driver SQLite dùng `modernc.org/sqlite` (pure Go) — **không cần CGO, không cần GCC/mingw**.
+
+### Chế độ Development (Hot Reload)
+
+```bash
+# Clone repository
+git clone https://github.com/TuansHuynh/internal-tool-api.git
+cd internal-tool-api
+
+# Khởi chạy với live reload (tự động cài npm dependencies)
+wails dev
+```
+
+### Build Production
+
 ```bash
 wails build
 ```
-File thực thi sau khi build thành công sẽ nằm trong thư mục:
-- `build/bin/internal-api-client-v1.3.1.exe` (đối với Windows).
+
+Output: `build/bin/internal-api-client-v1.3.3.exe` (Windows)
 
 ---
 
-## 6. Hướng dẫn sử dụng chi tiết
+## 8. Version Automation
 
-### Bước 1: Khởi tạo và Quản lý Không gian làm việc (Workspace)
-- **Tạo Dự án (Project):** Trên thanh Sidebar bên trái, nhấn biểu tượng dấu cộng để thêm một Project mới. Bạn có thể Tạo, Đổi tên hoặc Xoá dự án dễ dàng.
-- **Tạo Thư mục (Folder):** Nhấp chuột phải hoặc nhấn nút tùy chọn tại Project tương ứng để thêm thư mục nhằm phân loại các API cần gọi theo từng module chức năng.
-- **Tạo Request:** Tạo các HTTP Request mới nằm trong thư mục hoặc trực tiếp dưới Project. Ứng dụng hỗ trợ các Method phổ biến như `GET`, `POST`, `PUT`, `DELETE`, `PATCH`, `OPTIONS`, `HEAD`.
+Hệ thống tự động đồng bộ SemVer qua tất cả file cấu hình (`wails.json`, `package.json`, `version.json`, `app.go`):
 
-### Bước 2: Cấu hình Yêu cầu HTTP (Request Builder)
-- **URL & Port:** Nhập địa chỉ API đích. Hỗ trợ bật/tắt sử dụng Port tùy chỉnh nhanh chóng.
-- **Xác thực Bearer Token (Auth):**
-  - Cung cấp tab chuyên biệt **"Auth"** hỗ trợ xác thực **Bearer Token**.
-  - Tự động gắn header `Authorization: Bearer <token>` khi gửi request và khi chạy kiểm thử tải (Stress Test).
-  - Hỗ trợ sử dụng biến môi trường: nhập token trực tiếp hoặc sử dụng `{{token}}`.
-  - Tích hợp công cụ **JWT Payload Inspector**: Tự động giải mã các claims (JSON payload) của JWT token, hiển thị trạng thái hạn dùng (còn hạn / đã hết hạn) trực tiếp trên giao diện.
-- **Headers:** Nhập các khóa và giá trị tiêu đề (HTTP Headers) dưới dạng bảng danh sách khóa-giá trị trực quan.
-- **Request Body:** Sử dụng trình soạn thảo Monaco tích hợp để viết Request Body (hỗ trợ viết JSON, Raw Text, v.v.).
-- **Biến môi trường (Environment Variables):**
-  - Mặc định ứng dụng có sẵn `Local Environment`. Bạn có thể thêm các môi trường khác (Dev, Staging, Prod).
-  - Khai báo các cặp biến key-value (Ví dụ: `base_url = https://api.example.com`, `token = Bearer xyz`).
-  - Sử dụng biến môi trường trong URL, Headers, Body hoặc Bearer Token bằng cú pháp dấu ngoặc nhọn hai lớp: `{{base_url}}` hoặc `{{token}}`. Ứng dụng sẽ tự động thay thế giá trị tương ứng trước khi gửi request.
+```bash
+# Nâng Patch:  1.3.3 → 1.3.4
+npm run bump:patch
 
-### Bước 3: Gửi và Phân tích phản hồi (Send & Analyze Response)
-- Nhấn nút **"Send"** để gửi yêu cầu.
-- Giao diện bên phải sẽ hiển thị:
-  - **Status Code:** Mã trạng thái phản hồi (ví dụ: `200 OK`, `400 Bad Request`, `500 Internal Server Error`).
-  - **Thời gian phản hồi:** Tính bằng mili-giây (ms).
-  - **Dung lượng phản hồi:** Kích thước dữ liệu nhận về tính bằng Byte.
-  - **Headers:** Danh sách headers nhận về từ Server.
-  - **Body Preview:** Dữ liệu Body trả về được định dạng đẹp đẽ thông qua Monaco Editor (Read-only).
+# Nâng Minor:  1.3.3 → 1.4.0
+npm run bump:minor
 
-### Bước 4: Kiểm thử chịu tải / Stress Testing (Goroutine Stress Test)
-Đây là tính năng đặc biệt của công cụ, cho phép đo đạc khả năng chịu tải của API đích bằng cách gửi các yêu cầu song song:
-1. Chọn Request cần thực hiện đo tải.
-2. Cuộn xuống phần **"Goroutine Stress Test"** (nằm ở góc dưới cùng hoặc tab kiểm thử tải tùy thiết kế UI).
-3. Cấu hình các thông số:
-   - **Concurrency (Số luồng song song):** Số lượng Goroutine chạy đồng thời (Ví dụ: `10`, `50`, `100` kết nối).
-   - **Total Requests (Tổng số yêu cầu):** Số lượng yêu cầu HTTP cần gửi (Ví dụ: `100`, `1000` requests).
-4. Nhấn nút **"Kích Hoạt Tải"** (hoặc **"Start Test"**).
-5. Theo dõi kết quả trả về ngay sau khi hoàn thành:
-   - **Tổng số request thành công:** hiển thị tổng số và phân loại chi tiết:
-     - **Thành công (Success):** HTTP Status `< 400` và không bị lỗi kết nối mạng.
-     - **Thất bại (Failure / Lỗi kết nối):** HTTP Status `>= 400` hoặc lỗi TLS, Timeout, Rớt mạng.
-   - **Thời gian phản hồi trung bình (Average Response Time):** Thời gian trung bình của các kết nối thành công (tính theo ms).
+# Nâng Major:  1.3.3 → 2.0.0
+npm run bump:major
+
+# Chỉ định version cụ thể
+node scripts/bump-version.js 2.0.0
+
+# Nâng version + đổi tên app
+node scripts/bump-version.js minor --name="API Tester Ultimate"
+
+# Nâng version + tự động wails build
+npm run release
+# hoặc
+node scripts/bump-version.js patch --build
+```
 
 ---
 
-## 7. Hướng dẫn Bảo trì & Phát triển thêm
-- **Thay đổi Schema Database:** Cập nhật các câu lệnh SQL khởi tạo trong hàm `InitDB()` tại file [db.go](file:///c:/Users/nkocn/OneDrive/Desktop/Plan/internal-tool/internal-api-client/db.go).
-- **Thêm tính năng cho Client HTTP:** Bổ sung cấu hình hoặc tính năng (như HTTP/2, Client Certificate, Cookie Jar) trong file [core/client.go](file:///c:/Users/nkocn/OneDrive/Desktop/Plan/internal-tool/internal-api-client/core/client.go).
-- **Chỉnh sửa UI/UX:** Chỉnh sửa hoặc thêm các component React trong thư mục [frontend/src/components](file:///c:/Users/nkocn/OneDrive/Desktop/Plan/internal-tool/internal-api-client/frontend/src/components) và quản lý state tại [frontend/src/context/AppContext.tsx](file:///c:/Users/nkocn/OneDrive/Desktop/Plan/internal-tool/internal-api-client/frontend/src/context/AppContext.tsx).
+## 9. Hướng dẫn sử dụng
+
+### Bước 1 — Quản lý Workspace (Collections)
+
+1. **Tạo Project** → nhấn `+` trên Sidebar, đặt tên dự án.
+2. **Tạo Folder** → click chuột phải vào Project → *Add Folder* để phân nhóm API theo module.
+3. **Tạo Request** → click `+` trong Folder, chọn HTTP Method và đặt tên.
+
+### Bước 2 — Xây dựng Request
+
+- **Omnibar:** Nhập method, Base URL, Port (bật/tắt), Endpoint path.
+- **Params tab:** Nhập query params theo bảng hoặc gõ trực tiếp `?key=val` trên URL — tự đồng bộ 2 chiều.
+- **Headers tab:** Thêm headers dạng Key-Value, checkbox bật/tắt từng header.
+- **Body tab:** Chọn `JSON` / `Raw` / `form-urlencoded` / `None`, soạn thảo qua Monaco Editor.
+- **Auth tab:** Chọn loại xác thực (Bearer / Basic / API Key / No Auth).
+- **Import cURL:** Nhấn nút `Import cURL`, dán lệnh curl → tự động điền toàn bộ cấu hình.
+
+### Bước 3 — Gửi & Phân tích Response
+
+Nhấn `Send` hoặc `Ctrl + Enter`. **Response Panel** hiển thị:
+
+- Status Code (badge màu sắc), thời gian phản hồi (ms), dung lượng (bytes)
+- **Timing Breakdown:** DNS / TCP / TLS / TTFB / Download (thanh progress trực quan)
+- Body với 3 chế độ: `Pretty` (Monaco) · `Raw` · `Preview` (HTML iframe)
+- Response Headers dạng bảng
+
+### Bước 4 — Stress / Load Testing
+
+1. Nhấn nút **⚡ Stress Test** trên tab request.
+2. Cấu hình: **Virtual Users (VUs)** và **Total Requests**.
+3. Nhấn **Start Test** → theo dõi real-time console:
+   - RPS, Average Latency, Success / Failure count
+4. Nhấn **🛑 Dừng** bất kỳ lúc nào để cancel an toàn tất cả Goroutines.
+
+### Bước 5 — Biến môi trường
+
+1. Mở **Environment Modal** (biểu tượng `{}` trên toolbar).
+2. Tạo môi trường (Dev, Staging, Production...), thêm biến `key = value`.
+3. Sử dụng trong URL / Headers / Body / Auth: `{{base_url}}`, `{{token}}`.
+4. Chuyển đổi môi trường active từ dropdown.
+
+---
+
+## 10. Bảo trì & Phát triển
+
+| Nhiệm vụ | File cần chỉnh sửa |
+|---|---|
+| Thêm/sửa API endpoint Go | `app.go` + regenerate bindings bằng `wails generate module` |
+| Cập nhật schema DB | Hàm `InitDB()` trong `db.go` |
+| Tính năng HTTP Client / Stress Engine | `core/client.go` |
+| Thêm UI Component | `frontend/src/components/` |
+| Sửa state / business logic | `frontend/src/context/AppContext.tsx` |
+| Cập nhật cURL parser / Code Generator | `frontend/src/utils/curlParser.ts` |
+| Cập nhật styles / design tokens | `frontend/src/style.css` |
+
+---
+
+<p align="center">
+  Made with ❤️ by <strong>Huỳnh Tuấn (Tunas)</strong> &nbsp;·&nbsp; v1.3.3
+</p>
