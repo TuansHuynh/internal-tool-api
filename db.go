@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"internal-api-client/internal/security"
 	"os"
 	"path/filepath"
 
@@ -295,6 +296,15 @@ func (m *DBManager) GetRequests() ([]DBRequest, error) {
 		}
 		r.FolderID = folderID
 		r.UsePort = usePortInt == 1
+
+		// Decrypt sensitive credentials transparently
+		if decToken, err := security.DecryptString(r.AuthToken); err == nil {
+			r.AuthToken = decToken
+		}
+		if decConfig, err := security.DecryptString(r.AuthConfigJson); err == nil {
+			r.AuthConfigJson = decConfig
+		}
+
 		list = append(list, r)
 	}
 	return list, nil
@@ -337,7 +347,18 @@ func (m *DBManager) UpdateRequest(req DBRequest) error {
 	if req.AuthConfigJson == "" {
 		req.AuthConfigJson = "{}"
 	}
-	_, err := m.db.Exec(`UPDATE requests SET 
+
+	// Encrypt sensitive authentication fields before saving
+	encToken, err := security.EncryptString(req.AuthToken)
+	if err != nil {
+		encToken = req.AuthToken
+	}
+	encAuthConfig, err := security.EncryptString(req.AuthConfigJson)
+	if err != nil {
+		encAuthConfig = req.AuthConfigJson
+	}
+
+	_, err = m.db.Exec(`UPDATE requests SET 
 		name = ?, 
 		method = ?, 
 		base_url = ?, 
@@ -354,7 +375,7 @@ func (m *DBManager) UpdateRequest(req DBRequest) error {
 		folder_id = ?
 		WHERE id = ?`,
 		req.Name, req.Method, req.BaseURL, req.Port, usePortInt, req.ApiPath, req.ReqBody, req.HeadersJson,
-		req.ParamsJson, req.BodyType, req.AuthType, req.AuthToken, req.AuthConfigJson, fID, req.ID)
+		req.ParamsJson, req.BodyType, req.AuthType, encToken, encAuthConfig, fID, req.ID)
 	return err
 }
 
@@ -394,6 +415,10 @@ func (m *DBManager) GetEnvironments() ([]DBEnvironment, error) {
 			var enabledInt int
 			if err := varRows.Scan(&v.ID, &v.Key, &v.Value, &enabledInt); err == nil {
 				v.Enabled = enabledInt == 1
+				// Decrypt value transparently
+				if decVal, err := security.DecryptString(v.Value); err == nil {
+					v.Value = decVal
+				}
 				vars = append(vars, v)
 			}
 		}
@@ -425,8 +450,13 @@ func (m *DBManager) SaveEnvironment(env DBEnvironment) error {
 		if v.Enabled {
 			enabledInt = 1
 		}
-		_, err := tx.Exec("INSERT INTO env_variables (id, env_id, var_key, var_val, enabled) VALUES (?, ?, ?, ?, ?)",
-			v.ID, env.ID, v.Key, v.Value, enabledInt)
+		// Encrypt environment variable value before storing
+		encVal, err := security.EncryptString(v.Value)
+		if err != nil {
+			encVal = v.Value
+		}
+		_, err = tx.Exec("INSERT INTO env_variables (id, env_id, var_key, var_val, enabled) VALUES (?, ?, ?, ?, ?)",
+			v.ID, env.ID, v.Key, encVal, enabledInt)
 		if err != nil {
 			return err
 		}

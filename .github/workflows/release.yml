@@ -55,10 +55,10 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path internal/updater/bin | Out-Null
-          go build -ldflags="-s -w" -o internal/updater/bin/updater.exe ./cmd/updater/
+          go build -trimpath -ldflags="-s -w -buildid=" -o internal/updater/bin/updater.exe ./cmd/updater/
 
       - name: Build main app (Windows)
-        run: wails build -platform windows/amd64 -ldflags "-s -w"
+        run: wails build -clean -trimpath -platform windows/amd64 -ldflags "-s -w -buildid="
 
       - name: Stage Windows dist artifacts
         shell: pwsh
@@ -126,10 +126,10 @@ jobs:
       - name: Build updater (Linux)
         run: |
           mkdir -p internal/updater/bin
-          go build -ldflags="-s -w" -o internal/updater/bin/updater ./cmd/updater/
+          go build -trimpath -ldflags="-s -w -buildid=" -o internal/updater/bin/updater ./cmd/updater/
 
       - name: Build main app (Linux)
-        run: wails build -platform linux/amd64 -ldflags "-s -w"
+        run: wails build -clean -trimpath -platform linux/amd64 -ldflags "-s -w -buildid="
 
       - name: Stage Linux dist artifacts
         run: |

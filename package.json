@@ -5,9 +5,9 @@
   "private": true,
   "scripts": {
     "dev": "wails dev",
-    "build:updater": "go build -ldflags=\"-s -w\" -o internal/updater/bin/updater.exe ./cmd/updater/",
-    "build": "npm run build:updater && wails build",
-    "build:full": "npm run build:updater && wails build",
+    "build:updater": "go build -trimpath -ldflags=\"-s -w -buildid=\" -o internal/updater/bin/updater.exe ./cmd/updater/",
+    "build": "npm run build:updater && wails build -clean -trimpath -ldflags \"-s -w -buildid=\"",
+    "build:full": "npm run build:updater && wails build -clean -trimpath -ldflags \"-s -w -buildid=\"",
     "sync": "node scripts/sync-version.js",
     "bump:patch": "node scripts/bump-version.js patch",
     "bump:minor": "node scripts/bump-version.js minor",
