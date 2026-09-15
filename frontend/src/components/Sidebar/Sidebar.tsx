@@ -530,61 +530,133 @@ export default function Sidebar({ onOpenEnvModal }: SidebarProps) {
 
       {/* App Branding */}
       <div style={{
-        padding: '12px 14px',
+        padding: '12px 14px 10px',
         borderBottom: '1px solid var(--border-subtle)',
+        background: 'linear-gradient(180deg, #0d1527 0%, #0a0e17 100%)',
         display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        background: '#0a0e17'
+        flexDirection: 'column',
+        gap: '10px'
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <img
-            src={appLogo}
-            alt="Logo"
-            style={{
-              width: '26px',
-              height: '26px',
-              borderRadius: '6px',
-              objectFit: 'contain'
-            }}
-          />
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px' }}>
-            <span style={{ fontWeight: 700, fontSize: '13px', letterSpacing: '0.5px', color: '#f1f5f9' }}>
-              API TESTER PRO
-            </span>
-            <span style={{ fontSize: '10px', fontWeight: 600, color: 'var(--color-primary)', background: '#1e293b', padding: '1px 5px', borderRadius: '4px' }}>
-              v{appInfo.version}
-            </span>
+        {/* Row 1: Brand & Version */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '9px' }}>
+            <img
+              src={appLogo}
+              alt="Logo"
+              style={{
+                width: '28px',
+                height: '28px',
+                borderRadius: '7px',
+                objectFit: 'contain',
+                boxShadow: '0 0 10px rgba(56, 189, 248, 0.25)',
+                background: 'rgba(15, 23, 42, 0.6)',
+                border: '1px solid rgba(56, 189, 248, 0.25)'
+              }}
+            />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span style={{
+                fontWeight: 800,
+                fontSize: '13px',
+                letterSpacing: '0.6px',
+                color: '#f8fafc',
+                whiteSpace: 'nowrap'
+              }}>
+                API TESTER <span style={{ color: '#38bdf8' }}>PRO</span>
+              </span>
+              <span style={{
+                fontSize: '9.5px',
+                fontWeight: 700,
+                color: '#38bdf8',
+                background: 'rgba(56, 189, 248, 0.12)',
+                border: '1px solid rgba(56, 189, 248, 0.3)',
+                padding: '1px 6px',
+                borderRadius: '10px',
+                letterSpacing: '0.3px',
+                fontFamily: 'var(--font-mono)'
+              }}>
+                v{appInfo.version}
+              </span>
+            </div>
           </div>
         </div>
-        <div style={{ display: 'flex', gap: '4px' }}>
+
+        {/* Row 2: Quick Actions (Import / Export) */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr',
+          gap: '6px'
+        }}>
           <button
             onClick={() => fileInputRef.current?.click()}
             title="Nhập Postman Collection / Workspace JSON"
             style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '5px',
               fontSize: '11px',
-              padding: '2px 6px',
-              borderRadius: '4px',
-              background: '#1e293b',
+              fontWeight: 600,
+              padding: '5px 8px',
+              borderRadius: '5px',
+              background: 'rgba(30, 41, 59, 0.6)',
               color: '#38bdf8',
-              border: '1px solid #334155'
+              border: '1px solid rgba(56, 189, 248, 0.2)',
+              cursor: 'pointer',
+              transition: 'all 0.15s ease'
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.background = 'rgba(56, 189, 248, 0.15)';
+              e.currentTarget.style.borderColor = 'rgba(56, 189, 248, 0.4)';
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.background = 'rgba(30, 41, 59, 0.6)';
+              e.currentTarget.style.borderColor = 'rgba(56, 189, 248, 0.2)';
             }}
           >
-            📥 Import
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="7 10 12 15 17 10"/>
+              <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            Import
           </button>
           <button
             onClick={handleExportWorkspace}
             title="Xuất toàn bộ Workspace ra JSON sao lưu"
             style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '5px',
               fontSize: '11px',
-              padding: '2px 6px',
-              borderRadius: '4px',
-              background: '#1e293b',
-              color: 'var(--text-muted)',
-              border: '1px solid #334155'
+              fontWeight: 600,
+              padding: '5px 8px',
+              borderRadius: '5px',
+              background: 'rgba(30, 41, 59, 0.6)',
+              color: '#94a3b8',
+              border: '1px solid #334155',
+              cursor: 'pointer',
+              transition: 'all 0.15s ease'
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.background = 'rgba(51, 65, 85, 0.8)';
+              e.currentTarget.style.color = '#f1f5f9';
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.background = 'rgba(30, 41, 59, 0.6)';
+              e.currentTarget.style.color = '#94a3b8';
             }}
           >
-            💾 Export
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="17 8 12 3 7 8"/>
+              <line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+            Export
           </button>
         </div>
       </div>
