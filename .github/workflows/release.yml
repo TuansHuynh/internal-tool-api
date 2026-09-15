@@ -52,30 +52,37 @@ jobs:
           Write-Host "Version: $v"
 
       - name: Build updater (Windows)
+        shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path internal/updater/bin | Out-Null
           go build -ldflags="-s -w" -o internal/updater/bin/updater.exe ./cmd/updater/
-        shell: pwsh
 
       - name: Build main app (Windows)
         run: wails build -platform windows/amd64 -ldflags "-s -w"
 
-      - name: Rename main binary
+      - name: Stage Windows dist artifacts
         shell: pwsh
         run: |
-          $v = "${{ steps.version.outputs.version }}"
-          # Wails uses the outputfilename from wails.json
-          Get-ChildItem build/bin/*.exe | Where-Object { $_.Name -ne 'updater.exe' } |
-            Rename-Item -NewName "${{ env.APP_NAME }}-v$v.exe" -ErrorAction SilentlyContinue
-          echo "Built: build/bin/${{ env.APP_NAME }}-v$v.exe"
+          $v = (Get-Content version.json | ConvertFrom-Json).version
+          New-Item -ItemType Directory -Force -Path dist-bin | Out-Null
+
+          # Find the built executable and copy it to dist-bin with standard name
+          $builtExe = Get-ChildItem build/bin/*.exe | Where-Object { $_.Name -ne 'updater.exe' } | Select-Object -First 1
+          if (-not $builtExe) {
+            Write-Error "Built executable not found in build/bin/"
+            exit 1
+          }
+          Copy-Item $builtExe.FullName -Destination "dist-bin/${{ env.APP_NAME }}-v$v.exe" -Force
+          Copy-Item "internal/updater/bin/updater.exe" -Destination "dist-bin/updater.exe" -Force
+
+          Write-Host "Staged Windows artifacts:"
+          Get-ChildItem dist-bin
 
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
         with:
           name: windows-binaries
-          path: |
-            build/bin/${{ env.APP_NAME }}-v${{ steps.version.outputs.version }}.exe
-            internal/updater/bin/updater.exe
+          path: dist-bin/*
           retention-days: 1
 
   # ── Build: Linux ──────────────────────────────────────────────────────────
@@ -118,26 +125,32 @@ jobs:
 
       - name: Build updater (Linux)
         run: |
+          mkdir -p internal/updater/bin
           go build -ldflags="-s -w" -o internal/updater/bin/updater ./cmd/updater/
 
       - name: Build main app (Linux)
         run: wails build -platform linux/amd64 -ldflags "-s -w"
 
-      - name: Rename main binary
+      - name: Stage Linux dist artifacts
         run: |
-          V="${{ steps.version.outputs.version }}"
-          find build/bin -maxdepth 1 -type f ! -name 'updater' \
-            -exec mv {} "build/bin/${{ env.APP_NAME }}-v$V" \;
-          chmod +x "build/bin/${{ env.APP_NAME }}-v$V"
-          echo "Built: build/bin/${{ env.APP_NAME }}-v$V"
+          VERSION=$(cat version.json | python3 -c "import sys,json; print(json.load(sys.stdin)['version'])")
+          mkdir -p dist-bin
+          BUILT_BIN=$(find build/bin -maxdepth 1 -type f ! -name 'updater' | head -n 1)
+          if [ -z "$BUILT_BIN" ]; then
+            echo "ERROR: Built binary not found in build/bin/"
+            exit 1
+          fi
+          cp "$BUILT_BIN" "dist-bin/${{ env.APP_NAME }}-v${VERSION}"
+          cp internal/updater/bin/updater dist-bin/updater
+          chmod +x dist-bin/*
+          echo "Staged Linux artifacts:"
+          ls -la dist-bin/
 
       - name: Upload Linux artifacts
         uses: actions/upload-artifact@v4
         with:
           name: linux-binaries
-          path: |
-            build/bin/${{ env.APP_NAME }}-v${{ steps.version.outputs.version }}
-            internal/updater/bin/updater
+          path: dist-bin/*
           retention-days: 1
 
   # ── Release: Publish GitHub Release with manifest ─────────────────────────
@@ -166,14 +179,28 @@ jobs:
       - name: Compute SHA-256 checksums
         id: sha
         run: |
+          set -e
           V="${{ needs.build-windows.outputs.version }}"
           if [ -z "$V" ]; then
             V=$(cat version.json | python3 -c "import sys,json; print(json.load(sys.stdin)['version'])")
           fi
           APP="${{ env.APP_NAME }}"
 
+          echo "Inspecting downloaded artifact files:"
+          ls -la dist/windows/
+          ls -la dist/linux/
+
           WIN_EXE="dist/windows/${APP}-v${V}.exe"
           LINUX_BIN="dist/linux/${APP}-v${V}"
+
+          if [ ! -f "$WIN_EXE" ]; then
+            echo "ERROR: Windows binary $WIN_EXE was not found!"
+            exit 1
+          fi
+          if [ ! -f "$LINUX_BIN" ]; then
+            echo "ERROR: Linux binary $LINUX_BIN was not found!"
+            exit 1
+          fi
 
           WIN_SHA=$(sha256sum "$WIN_EXE" | awk '{print $1}')
           LINUX_SHA=$(sha256sum "$LINUX_BIN" | awk '{print $1}')
@@ -219,6 +246,7 @@ jobs:
           draft: false
           prerelease: false
           generate_release_notes: true
+          fail_on_unmatched_files: true
           files: |
             dist/windows/${{ env.APP_NAME }}-v${{ steps.sha.outputs.version }}.exe
             dist/windows/updater.exe

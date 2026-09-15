@@ -113,24 +113,36 @@ func replaceFile(src, dst string) error {
 	return copyFile(src, dst)
 }
 
-// copyFile copies src to dst using streaming I/O.
+// copyFile copies src to dst using streaming I/O with retries for temporary file locks.
 func copyFile(src, dst string) error {
-	in, err := os.Open(src)
-	if err != nil {
-		return fmt.Errorf("open source: %w", err)
-	}
-	defer in.Close()
+	var lastErr error
+	for attempt := 1; attempt <= 10; attempt++ {
+		err := func() error {
+			in, err := os.Open(src)
+			if err != nil {
+				return fmt.Errorf("open source: %w", err)
+			}
+			defer in.Close()
 
-	out, err := os.Create(dst)
-	if err != nil {
-		return fmt.Errorf("create destination: %w", err)
-	}
-	defer out.Close()
+			out, err := os.Create(dst)
+			if err != nil {
+				return fmt.Errorf("create destination: %w", err)
+			}
+			defer out.Close()
 
-	if _, err = io.Copy(out, in); err != nil {
-		return fmt.Errorf("copy: %w", err)
+			if _, err = io.Copy(out, in); err != nil {
+				return fmt.Errorf("copy: %w", err)
+			}
+			return out.Sync()
+		}()
+
+		if err == nil {
+			return nil
+		}
+		lastErr = err
+		time.Sleep(300 * time.Millisecond)
 	}
-	return out.Sync()
+	return fmt.Errorf("failed after 10 attempts: %w", lastErr)
 }
 
 // rollback replaces target with the backup file. Best-effort.
