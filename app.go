@@ -4,12 +4,45 @@ import (
 	"context"
 	_ "embed"
 	"encoding/json"
+	"fmt"
 	"internal-api-client/core"
+	"internal-api-client/internal/updater"
+	"log"
+	"os"
 	"runtime"
+	"sync"
+	"sync/atomic"
+
+	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
+
+// UpdateManifestURL is the single source of truth for the update manifest location.
+// Change this if the release server moves.
+const UpdateManifestURL = "https://github.com/TuansHuynh/internal-tool-api/releases/latest/download/latest.json"
 
 //go:embed version.json
 var versionJsonData []byte
+
+// updaterBinary chứa binary của updater process được embed sẵn vào app.
+// Nằm ở internal/updater/bin/ để KHÔNG bị gitignore (build/bin bị ignore).
+// CI sẽ build lại file này trước khi chạy `wails build`.
+// Trên dev: file stub ~2KB → ApplyUpdate() sẽ báo lỗi rõ ràng thay vì crash.
+//
+//go:embed internal/updater/bin/updater.exe
+var updaterBinaryWindows []byte
+
+//go:embed internal/updater/bin/updater
+var updaterBinaryUnix []byte
+
+// getUpdaterBinary returns the embedded updater bytes for the running OS.
+func getUpdaterBinary() []byte {
+	if runtime.GOOS == "windows" {
+		return updaterBinaryWindows
+	}
+	return updaterBinaryUnix
+}
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 type AppInfo struct {
 	Name           string `json:"name"`
@@ -19,10 +52,26 @@ type AppInfo struct {
 	OS             string `json:"os"`
 }
 
+// UpdateStatus mirrors the download state emitted to the frontend via EventsEmit.
+type UpdateStatus struct {
+	// Phase: "idle" | "downloading" | "done" | "error"
+	Phase    string `json:"phase"`
+	Percent  int64  `json:"percent"`
+	ErrorMsg string `json:"errorMsg,omitempty"`
+}
+
+// ─── App struct ───────────────────────────────────────────────────────────────
+
 type App struct {
 	ctx       context.Context
 	engine    *core.HttpClientEngine
 	dbManager *DBManager
+
+	// update download state
+	downloadMu      sync.Mutex
+	downloadPercent int64  // atomic, 0–100
+	downloadedPath  string // path of the fully downloaded & verified binary
+	downloadPhase   string // "idle" | "downloading" | "done" | "error"
 }
 
 func NewApp() *App {
@@ -31,8 +80,9 @@ func NewApp() *App {
 		println("Error initializing SQLite database:", err.Error())
 	}
 	return &App{
-		engine:    core.NewHttpClientEngine(true, 30),
-		dbManager: dbm,
+		engine:        core.NewHttpClientEngine(true, 30),
+		dbManager:     dbm,
+		downloadPhase: "idle",
 	}
 }
 
@@ -40,13 +90,15 @@ func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 }
 
+// ─── App Info ─────────────────────────────────────────────────────────────────
+
 func (a *App) GetAppInfo() AppInfo {
 	var info AppInfo
 	if len(versionJsonData) > 0 {
 		_ = json.Unmarshal(versionJsonData, &info)
 	}
 	if info.Version == "" {
-		info.Version = "1.3.1"
+		info.Version = "1.3.3"
 	}
 	if info.Name == "" {
 		info.Name = "internal-api-client"
@@ -54,6 +106,123 @@ func (a *App) GetAppInfo() AppInfo {
 	info.OS = runtime.GOOS
 	return info
 }
+
+// ─── Update API (Wails-bound methods callable from frontend) ──────────────────
+
+// CheckForUpdate fetches the manifest and returns UpdateInfo if a newer version
+// exists for the current platform. Returns nil (and no error) when up-to-date.
+// On network failure: logs the error and returns it — the frontend handles it gracefully.
+func (a *App) CheckForUpdate() (*updater.UpdateInfo, error) {
+	info := a.GetAppInfo()
+	result, err := updater.CheckForUpdate(UpdateManifestURL, info.Version)
+	if err != nil {
+		log.Printf("[app] update check failed (non-fatal): %v", err)
+		return nil, fmt.Errorf("update check: %w", err)
+	}
+	return result, nil
+}
+
+// StartDownloadUpdate begins downloading the new binary in a background goroutine.
+// Progress events ("updater:status") are emitted via Wails EventsEmit so the
+// frontend progress bar updates in real time without polling.
+func (a *App) StartDownloadUpdate(version, url, sha256 string) error {
+	a.downloadMu.Lock()
+	if a.downloadPhase == "downloading" {
+		a.downloadMu.Unlock()
+		return fmt.Errorf("download already in progress")
+	}
+	dest := updater.DownloadDestination(version)
+	a.downloadPhase = "downloading"
+	a.downloadedPath = ""
+	atomic.StoreInt64(&a.downloadPercent, 0)
+	a.downloadMu.Unlock()
+
+	a.emitUpdateStatus(UpdateStatus{Phase: "downloading", Percent: 0})
+
+	go func() {
+		client := updater.NewDownloadClient()
+		downloadErr := updater.DownloadUpdate(client, url, sha256, dest, func(downloaded, total int64) {
+			var pct int64
+			if total > 0 {
+				pct = downloaded * 100 / total
+			}
+			atomic.StoreInt64(&a.downloadPercent, pct)
+			a.emitUpdateStatus(UpdateStatus{Phase: "downloading", Percent: pct})
+		})
+
+		a.downloadMu.Lock()
+		defer a.downloadMu.Unlock()
+
+		if downloadErr != nil {
+			log.Printf("[app] download failed: %v", downloadErr)
+			a.downloadPhase = "error"
+			a.emitUpdateStatus(UpdateStatus{Phase: "error", ErrorMsg: downloadErr.Error()})
+			return
+		}
+
+		a.downloadPhase = "done"
+		a.downloadedPath = dest
+		a.emitUpdateStatus(UpdateStatus{Phase: "done", Percent: 100})
+		log.Printf("[app] download complete → %s", dest)
+	}()
+
+	return nil
+}
+
+// GetUpdateStatus returns the current download phase and percent for polling fallback.
+func (a *App) GetUpdateStatus() UpdateStatus {
+	a.downloadMu.Lock()
+	phase := a.downloadPhase
+	a.downloadMu.Unlock()
+	return UpdateStatus{
+		Phase:   phase,
+		Percent: atomic.LoadInt64(&a.downloadPercent),
+	}
+}
+
+// ApplyUpdate extracts the embedded updater binary, launches it as a detached
+// process, then quits the application. The updater waits for this process to
+// exit before replacing the binary and restarting the app.
+func (a *App) ApplyUpdate() error {
+	a.downloadMu.Lock()
+	phase := a.downloadPhase
+	src := a.downloadedPath
+	a.downloadMu.Unlock()
+
+	if phase != "done" || src == "" {
+		return fmt.Errorf("no completed download ready (phase=%s)", phase)
+	}
+
+	exePath, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("resolve current executable: %w", err)
+	}
+
+	binary := getUpdaterBinary()
+	// In dev builds the stub is just a text placeholder (<100 bytes).
+	if len(binary) < 1024 {
+		return fmt.Errorf("updater binary not available — run `go build ./cmd/updater/` first")
+	}
+
+	pid := os.Getpid()
+	if err = updater.LaunchUpdaterProcess(binary, pid, src, exePath); err != nil {
+		return fmt.Errorf("launch updater: %w", err)
+	}
+
+	log.Printf("[app] updater launched — quitting (PID=%d)", pid)
+	wailsRuntime.Quit(a.ctx)
+	return nil
+}
+
+// emitUpdateStatus pushes a status event to the frontend.
+func (a *App) emitUpdateStatus(status UpdateStatus) {
+	if a.ctx == nil {
+		return
+	}
+	wailsRuntime.EventsEmit(a.ctx, "updater:status", status)
+}
+
+// ─── HTTP Engine ──────────────────────────────────────────────────────────────
 
 func (a *App) ExecuteRequest(payload core.RequestPayload) (core.ResponsePayload, error) {
 	return a.engine.Execute(payload)
@@ -66,6 +235,8 @@ func (a *App) ExecuteLoadTest(payload core.RequestPayload, concurrency int, tota
 func (a *App) CancelLoadTest() {
 	a.engine.CancelStressTest()
 }
+
+// ─── Database – Projects ──────────────────────────────────────────────────────
 
 func (a *App) GetAllProjectsData() (ProjectDataPayload, error) {
 	var payload ProjectDataPayload
@@ -84,7 +255,6 @@ func (a *App) GetAllProjectsData() (ProjectDataPayload, error) {
 	if err != nil {
 		return payload, err
 	}
-
 	payload.Projects = projects
 	payload.Folders = folders
 	payload.Requests = requests
@@ -154,7 +324,7 @@ func (a *App) DeleteRequestInDB(id string) error {
 	return a.dbManager.DeleteRequest(id)
 }
 
-// Environments RPC
+// ─── Database – Environments ──────────────────────────────────────────────────
 
 func (a *App) GetEnvironmentsFromDB() ([]DBEnvironment, error) {
 	if a.dbManager == nil {
@@ -184,7 +354,7 @@ func (a *App) SaveAllEnvironmentsToDB(envs []DBEnvironment) error {
 	return a.dbManager.SaveAllEnvironments(envs)
 }
 
-// Workspace Export / Import
+// ─── Workspace Export / Import ────────────────────────────────────────────────
 
 type FullWorkspaceExport struct {
 	Projects     []DBProject     `json:"projects"`
@@ -203,7 +373,6 @@ func (a *App) ExportFullWorkspace() (string, error) {
 	if err != nil {
 		return "", err
 	}
-
 	export := FullWorkspaceExport{
 		Projects:     data.Projects,
 		Folders:      data.Folders,
@@ -211,7 +380,6 @@ func (a *App) ExportFullWorkspace() (string, error) {
 		Environments: envs,
 		Version:      "2.0",
 	}
-
 	b, err := json.MarshalIndent(export, "", "  ")
 	if err != nil {
 		return "", err

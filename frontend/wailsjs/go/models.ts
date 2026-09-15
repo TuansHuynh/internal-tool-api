@@ -291,6 +291,43 @@ export namespace main {
 		    return a;
 		}
 	}
+	export class UpdateStatus {
+	    phase: string;
+	    percent: number;
+	    errorMsg?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new UpdateStatus(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.phase = source["phase"];
+	        this.percent = source["percent"];
+	        this.errorMsg = source["errorMsg"];
+	    }
+	}
+
+}
+
+export namespace updater {
+	
+	export class UpdateInfo {
+	    Version: string;
+	    URL: string;
+	    SHA256: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new UpdateInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.Version = source["Version"];
+	        this.URL = source["URL"];
+	        this.SHA256 = source["SHA256"];
+	    }
+	}
 
 }
 
