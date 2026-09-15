@@ -257,6 +257,89 @@ export namespace main {
 	        this.authConfigJson = source["authConfigJson"];
 	    }
 	}
+	export class DBScenarioStep {
+	    id: string;
+	    scenarioId: string;
+	    stepOrder: number;
+	    name: string;
+	    method: string;
+	    apiPath: string;
+	    headersJson: string;
+	    paramsJson: string;
+	    body: string;
+	    bodyType: string;
+	    authType: string;
+	    authToken: string;
+	    authConfigJson: string;
+	    assertionsJson: string;
+	    extractVarsJson: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new DBScenarioStep(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.scenarioId = source["scenarioId"];
+	        this.stepOrder = source["stepOrder"];
+	        this.name = source["name"];
+	        this.method = source["method"];
+	        this.apiPath = source["apiPath"];
+	        this.headersJson = source["headersJson"];
+	        this.paramsJson = source["paramsJson"];
+	        this.body = source["body"];
+	        this.bodyType = source["bodyType"];
+	        this.authType = source["authType"];
+	        this.authToken = source["authToken"];
+	        this.authConfigJson = source["authConfigJson"];
+	        this.assertionsJson = source["assertionsJson"];
+	        this.extractVarsJson = source["extractVarsJson"];
+	    }
+	}
+	export class DBScenario {
+	    id: string;
+	    name: string;
+	    description: string;
+	    baseUrl: string;
+	    stopOnError: boolean;
+	    delayMs: number;
+	    steps: DBScenarioStep[];
+	
+	    static createFrom(source: any = {}) {
+	        return new DBScenario(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.description = source["description"];
+	        this.baseUrl = source["baseUrl"];
+	        this.stopOnError = source["stopOnError"];
+	        this.delayMs = source["delayMs"];
+	        this.steps = this.convertValues(source["steps"], DBScenarioStep);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	
 	export class ProjectDataPayload {
 	    projects: DBProject[];
 	    folders: DBFolder[];

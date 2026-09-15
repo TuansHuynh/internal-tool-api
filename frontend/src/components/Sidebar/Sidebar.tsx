@@ -6,9 +6,10 @@ import appLogo from '../../assets/images/logo.png';
 
 interface SidebarProps {
   onOpenEnvModal?: () => void;
+  onOpenAutomationModal?: () => void;
 }
 
-export default function Sidebar({ onOpenEnvModal }: SidebarProps) {
+export default function Sidebar({ onOpenEnvModal, onOpenAutomationModal }: SidebarProps) {
   const {
     projects, folders, dbRequests,
     createProject, renameProject, deleteProject,
@@ -661,7 +662,7 @@ export default function Sidebar({ onOpenEnvModal }: SidebarProps) {
         </div>
       </div>
 
-      {/* Tabs: Collections vs History */}
+      {/* Tabs: Collections vs Automation vs History */}
       <div style={{
         display: 'flex',
         borderBottom: '1px solid var(--border-subtle)',
@@ -671,26 +672,48 @@ export default function Sidebar({ onOpenEnvModal }: SidebarProps) {
           onClick={() => setActiveTab('collections')}
           style={{
             flex: 1,
-            padding: '9px',
+            padding: '9px 4px',
             background: activeTab === 'collections' ? 'var(--bg-sidebar)' : 'transparent',
             color: activeTab === 'collections' ? 'var(--color-primary)' : 'var(--text-muted)',
             fontWeight: activeTab === 'collections' ? 600 : 400,
             borderBottom: activeTab === 'collections' ? '2px solid var(--color-primary)' : '2px solid transparent',
-            fontSize: '12px'
+            fontSize: '11.5px',
+            cursor: 'pointer'
           }}
         >
           📁 Collections
         </button>
         <button
+          onClick={() => onOpenAutomationModal ? onOpenAutomationModal() : null}
+          title="Mở bộ kiểm thử kịch bản tự động (Automation Test Suite)"
+          style={{
+            flex: 1,
+            padding: '9px 4px',
+            background: 'transparent',
+            color: '#38bdf8',
+            fontWeight: 600,
+            borderBottom: '2px solid transparent',
+            fontSize: '11.5px',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '3px'
+          }}
+        >
+          🤖 Auto Test
+        </button>
+        <button
           onClick={() => setActiveTab('history')}
           style={{
             flex: 1,
-            padding: '9px',
+            padding: '9px 4px',
             background: activeTab === 'history' ? 'var(--bg-sidebar)' : 'transparent',
             color: activeTab === 'history' ? 'var(--color-primary)' : 'var(--text-muted)',
             fontWeight: activeTab === 'history' ? 600 : 400,
             borderBottom: activeTab === 'history' ? '2px solid var(--color-primary)' : '2px solid transparent',
-            fontSize: '12px'
+            fontSize: '11.5px',
+            cursor: 'pointer'
           }}
         >
           🕒 History ({history.length})
@@ -1051,15 +1074,38 @@ export default function Sidebar({ onOpenEnvModal }: SidebarProps) {
       )}
 
       {/* Footer / Quick Actions */}
-      {onOpenEnvModal && (
-        <div style={{
-          padding: '10px 12px',
-          borderTop: '1px solid var(--border-subtle)',
-          background: '#0a0e17',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between'
-        }}>
+      <div style={{
+        padding: '10px 12px',
+        borderTop: '1px solid var(--border-subtle)',
+        background: '#0a0e17',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '6px'
+      }}>
+        {onOpenAutomationModal && (
+          <button
+            onClick={onOpenAutomationModal}
+            title="Mở Studio thiết lập & chạy kịch bản Automation Test"
+            style={{
+              width: '100%',
+              padding: '6px 10px',
+              borderRadius: '6px',
+              background: 'rgba(56, 189, 248, 0.1)',
+              border: '1px solid rgba(56, 189, 248, 0.25)',
+              color: '#38bdf8',
+              fontSize: '12px',
+              fontWeight: 700,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '6px',
+              cursor: 'pointer'
+            }}
+          >
+            <span>🤖</span> Automation Test Studio
+          </button>
+        )}
+        {onOpenEnvModal && (
           <button
             onClick={onOpenEnvModal}
             style={{
@@ -1074,13 +1120,14 @@ export default function Sidebar({ onOpenEnvModal }: SidebarProps) {
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              gap: '6px'
+              gap: '6px',
+              cursor: 'pointer'
             }}
           >
             <span>🌐</span> Quản lý Biến Môi trường
           </button>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* Action Hover Styles */}
       <style dangerouslySetInnerHTML={{__html: `

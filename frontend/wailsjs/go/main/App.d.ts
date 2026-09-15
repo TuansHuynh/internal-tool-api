@@ -24,6 +24,8 @@ export function DeleteProjectInDB(arg1:string):Promise<void>;
 
 export function DeleteRequestInDB(arg1:string):Promise<void>;
 
+export function DeleteScenarioFromDB(arg1:string):Promise<void>;
+
 export function ExecuteLoadTest(arg1:core.RequestPayload,arg2:number,arg3:number,arg4:number,arg5:number,arg6:number):Promise<core.StressTestResult>;
 
 export function ExecuteRequest(arg1:core.RequestPayload):Promise<core.ResponsePayload>;
@@ -36,11 +38,15 @@ export function GetAppInfo():Promise<main.AppInfo>;
 
 export function GetEnvironmentsFromDB():Promise<Array<main.DBEnvironment>>;
 
+export function GetScenariosFromDB():Promise<Array<main.DBScenario>>;
+
 export function GetUpdateStatus():Promise<main.UpdateStatus>;
 
 export function SaveAllEnvironmentsToDB(arg1:Array<main.DBEnvironment>):Promise<void>;
 
 export function SaveEnvironmentToDB(arg1:main.DBEnvironment):Promise<void>;
+
+export function SaveScenarioToDB(arg1:main.DBScenario):Promise<void>;
 
 export function StartDownloadUpdate(arg1:string,arg2:string,arg3:string):Promise<void>;
 

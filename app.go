@@ -372,6 +372,29 @@ func (a *App) SaveAllEnvironmentsToDB(envs []DBEnvironment) error {
 	return a.dbManager.SaveAllEnvironments(envs)
 }
 
+// ─── Database – Scenarios (Automation Test) ───────────────────────────────────
+
+func (a *App) GetScenariosFromDB() ([]DBScenario, error) {
+	if a.dbManager == nil {
+		return nil, nil
+	}
+	return a.dbManager.GetScenarios()
+}
+
+func (a *App) SaveScenarioToDB(scenario DBScenario) error {
+	if a.dbManager == nil {
+		return nil
+	}
+	return a.dbManager.SaveScenario(scenario)
+}
+
+func (a *App) DeleteScenarioFromDB(id string) error {
+	if a.dbManager == nil {
+		return nil
+	}
+	return a.dbManager.DeleteScenario(id)
+}
+
 // ─── Workspace Export / Import ────────────────────────────────────────────────
 
 type FullWorkspaceExport struct {
@@ -379,6 +402,7 @@ type FullWorkspaceExport struct {
 	Folders      []DBFolder      `json:"folders"`
 	Requests     []DBRequest     `json:"requests"`
 	Environments []DBEnvironment `json:"environments"`
+	Scenarios    []DBScenario    `json:"scenarios,omitempty"`
 	Version      string          `json:"version"`
 }
 
@@ -391,12 +415,14 @@ func (a *App) ExportFullWorkspace() (string, error) {
 	if err != nil {
 		return "", err
 	}
+	scenarios, _ := a.GetScenariosFromDB()
 	export := FullWorkspaceExport{
 		Projects:     data.Projects,
 		Folders:      data.Folders,
 		Requests:     data.Requests,
 		Environments: envs,
-		Version:      "2.0",
+		Scenarios:    scenarios,
+		Version:      "2.1",
 	}
 	b, err := json.MarshalIndent(export, "", "  ")
 	if err != nil {

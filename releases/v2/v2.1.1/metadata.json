@@ -1,0 +1,11 @@
+{
+  "appName": "Internal Tool API",
+  "majorVersion": "v2",
+  "version": "v2.1.1",
+  "executableName": "Internal Tool API_v2.1.1.exe",
+  "archivedAt": "2026-09-15T18:12:00.365Z",
+  "files": [
+    "Internal Tool API_v2.1.1.exe",
+    "updater.exe"
+  ]
+}

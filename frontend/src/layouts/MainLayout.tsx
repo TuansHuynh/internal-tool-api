@@ -23,6 +23,7 @@ interface UpdateStatus {
 
 export default function MainLayout() {
   const [isEnvModalOpen, setIsEnvModalOpen] = useState(false);
+  const [isAutomationModalOpen, setIsAutomationModalOpen] = useState(false);
 
   // ── Update state ──────────────────────────────────────────────────────────
   const [updateInfo, setUpdateInfo]         = useState<UpdateInfo | null>(null);
@@ -134,7 +135,10 @@ export default function MainLayout() {
         display: 'flex',
         flexDirection: 'column'
       }}>
-        <Sidebar onOpenEnvModal={() => setIsEnvModalOpen(true)} />
+        <Sidebar
+          onOpenEnvModal={() => setIsEnvModalOpen(true)}
+          onOpenAutomationModal={() => setIsAutomationModalOpen(true)}
+        />
       </div>
 
       {/* Vùng làm việc chính bên phải */}
@@ -148,6 +152,8 @@ export default function MainLayout() {
         <Workspace
           isEnvModalOpen={isEnvModalOpen}
           setIsEnvModalOpen={setIsEnvModalOpen}
+          isAutomationModalOpen={isAutomationModalOpen}
+          setIsAutomationModalOpen={setIsAutomationModalOpen}
         />
       </div>
 

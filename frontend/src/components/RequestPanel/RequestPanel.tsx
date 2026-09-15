@@ -6,9 +6,10 @@ import { parseCurl, generateCodeSnippet, generateCurlSnippet } from '../../utils
 interface RequestPanelProps {
   onOpenStressModal?: () => void;
   onOpenEnvModal?: () => void;
+  onOpenAutomationModal?: () => void;
 }
 
-export default function RequestPanel({ onOpenStressModal, onOpenEnvModal }: RequestPanelProps) {
+export default function RequestPanel({ onOpenStressModal, onOpenEnvModal, onOpenAutomationModal }: RequestPanelProps) {
   const { 
     activeTab, updateActiveTab, loading, handleSendRequest,
     environments, activeEnvId, setActiveEnvId,
@@ -523,9 +524,34 @@ export default function RequestPanel({ onOpenStressModal, onOpenEnvModal }: Requ
           )}
         </button>
 
+        {/* Automation Test Button */}
+        {onOpenAutomationModal && (
+          <button
+            type="button"
+            onClick={onOpenAutomationModal}
+            title="Mở Studio kiểm thử kịch bản Automation Test tự động"
+            style={{
+              padding: '0 12px',
+              background: 'rgba(56, 189, 248, 0.12)',
+              border: '1px solid rgba(56, 189, 248, 0.3)',
+              color: '#38bdf8',
+              borderRadius: '6px',
+              fontWeight: 700,
+              fontSize: '12px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              cursor: 'pointer'
+            }}
+          >
+            <span>🤖</span> Auto Test
+          </button>
+        )}
+
         {/* Stress Test Button */}
         {onOpenStressModal && (
           <button
+            type="button"
             onClick={onOpenStressModal}
             title="Mở bảng đo tải hệ thống bằng Goroutines"
             style={{
@@ -538,7 +564,8 @@ export default function RequestPanel({ onOpenStressModal, onOpenEnvModal }: Requ
               fontSize: '12px',
               display: 'flex',
               alignItems: 'center',
-              gap: '4px'
+              gap: '4px',
+              cursor: 'pointer'
             }}
           >
             <span>⚡</span> Đo Tải

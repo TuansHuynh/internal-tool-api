@@ -4,13 +4,21 @@ import RequestPanel from '../../components/RequestPanel/RequestPanel';
 import ResponsePanel from '../../components/ResponsePanel/ResponsePanel';
 import StressTestModal from '../../components/StressTestModal/StressTestModal';
 import EnvironmentModal from '../../components/EnvironmentModal/EnvironmentModal';
+import AutomationModal from '../../components/AutomationModal/AutomationModal';
 
 interface WorkspaceProps {
   isEnvModalOpen?: boolean;
   setIsEnvModalOpen?: (open: boolean) => void;
+  isAutomationModalOpen?: boolean;
+  setIsAutomationModalOpen?: (open: boolean) => void;
 }
 
-export default function Workspace({ isEnvModalOpen, setIsEnvModalOpen }: WorkspaceProps) {
+export default function Workspace({
+  isEnvModalOpen,
+  setIsEnvModalOpen,
+  isAutomationModalOpen,
+  setIsAutomationModalOpen
+}: WorkspaceProps) {
   const { 
     tabs, activeTabId, setActiveTabId, createNewTab, closeTab, activeTab, reorderTabs
   } = useApp();
@@ -18,6 +26,7 @@ export default function Workspace({ isEnvModalOpen, setIsEnvModalOpen }: Workspa
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [isStressModalOpen, setIsStressModalOpen] = useState(false);
   const [localEnvOpen, setLocalEnvOpen] = useState(false);
+  const [localAutoOpen, setLocalAutoOpen] = useState(false);
 
   // Vertical Resizable Splitter State
   const [requestPanelHeight, setRequestPanelHeight] = useState<number>(310);
@@ -27,6 +36,9 @@ export default function Workspace({ isEnvModalOpen, setIsEnvModalOpen }: Workspa
 
   const isEnvOpen = isEnvModalOpen !== undefined ? isEnvModalOpen : localEnvOpen;
   const setEnvOpen = setIsEnvModalOpen || setLocalEnvOpen;
+
+  const isAutoOpen = isAutomationModalOpen !== undefined ? isAutomationModalOpen : localAutoOpen;
+  const setAutoOpen = setIsAutomationModalOpen || setLocalAutoOpen;
 
   const handleDragStart = (e: React.DragEvent, index: number) => {
     e.dataTransfer.effectAllowed = 'move';
@@ -227,6 +239,7 @@ export default function Workspace({ isEnvModalOpen, setIsEnvModalOpen }: Workspa
             <RequestPanel 
               onOpenStressModal={() => setIsStressModalOpen(true)}
               onOpenEnvModal={() => setEnvOpen(true)}
+              onOpenAutomationModal={() => setAutoOpen(true)}
             />
           </div>
 
@@ -320,6 +333,11 @@ export default function Workspace({ isEnvModalOpen, setIsEnvModalOpen }: Workspa
       <EnvironmentModal
         isOpen={isEnvOpen}
         onClose={() => setEnvOpen(false)}
+      />
+
+      <AutomationModal
+        isOpen={isAutoOpen}
+        onClose={() => setAutoOpen(false)}
       />
     </div>
   );

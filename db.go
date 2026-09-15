@@ -40,6 +40,34 @@ type DBRequest struct {
 	AuthConfigJson string `json:"authConfigJson"`
 }
 
+type DBScenarioStep struct {
+	ID             string `json:"id"`
+	ScenarioID     string `json:"scenarioId"`
+	StepOrder      int    `json:"stepOrder"`
+	Name           string `json:"name"`
+	Method         string `json:"method"`
+	ApiPath        string `json:"apiPath"`
+	HeadersJson    string `json:"headersJson"`
+	ParamsJson     string `json:"paramsJson"`
+	Body           string `json:"body"`
+	BodyType       string `json:"bodyType"`
+	AuthType       string `json:"authType"`
+	AuthToken      string `json:"authToken"`
+	AuthConfigJson string `json:"authConfigJson"`
+	AssertionsJson string `json:"assertionsJson"`
+	ExtractVarsJson string `json:"extractVarsJson"`
+}
+
+type DBScenario struct {
+	ID          string           `json:"id"`
+	Name        string           `json:"name"`
+	Description string           `json:"description"`
+	BaseURL     string           `json:"baseUrl"`
+	StopOnError bool             `json:"stopOnError"`
+	DelayMs     int              `json:"delayMs"`
+	Steps       []DBScenarioStep `json:"steps"`
+}
+
 type DBEnvVariable struct {
 	ID      string `json:"id"`
 	Key     string `json:"key"`
@@ -122,6 +150,32 @@ func InitDB() (*DBManager, error) {
 			var_val TEXT NOT NULL,
 			enabled INTEGER NOT NULL DEFAULT 1,
 			FOREIGN KEY(env_id) REFERENCES environments(id) ON DELETE CASCADE
+		);`,
+		`CREATE TABLE IF NOT EXISTS scenarios (
+			id TEXT PRIMARY KEY,
+			name TEXT NOT NULL,
+			description TEXT DEFAULT '',
+			base_url TEXT DEFAULT '',
+			stop_on_error INTEGER DEFAULT 1,
+			delay_ms INTEGER DEFAULT 0
+		);`,
+		`CREATE TABLE IF NOT EXISTS scenario_steps (
+			id TEXT PRIMARY KEY,
+			scenario_id TEXT NOT NULL,
+			step_order INTEGER NOT NULL,
+			name TEXT NOT NULL,
+			method TEXT NOT NULL,
+			api_path TEXT NOT NULL,
+			headers_json TEXT DEFAULT '[]',
+			params_json TEXT DEFAULT '[]',
+			body TEXT DEFAULT '',
+			body_type TEXT DEFAULT 'json',
+			auth_type TEXT DEFAULT 'none',
+			auth_token TEXT DEFAULT '',
+			auth_config_json TEXT DEFAULT '{}',
+			assertions_json TEXT DEFAULT '[]',
+			extract_vars_json TEXT DEFAULT '[]',
+			FOREIGN KEY(scenario_id) REFERENCES scenarios(id) ON DELETE CASCADE
 		);`,
 	}
 
@@ -488,4 +542,142 @@ func (m *DBManager) SaveAllEnvironments(envs []DBEnvironment) error {
 		}
 	}
 	return nil
+}
+
+// ==========================================
+// SCENARIOS CRUD
+// ==========================================
+
+func (m *DBManager) GetScenarios() ([]DBScenario, error) {
+	rows, err := m.db.Query("SELECT id, name, description, base_url, stop_on_error, delay_ms FROM scenarios")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var scenarios []DBScenario
+	for rows.Next() {
+		var s DBScenario
+		var stopOnErrorInt int
+		if err := rows.Scan(&s.ID, &s.Name, &s.Description, &s.BaseURL, &stopOnErrorInt, &s.DelayMs); err != nil {
+			return nil, err
+		}
+		s.StopOnError = stopOnErrorInt == 1
+		scenarios = append(scenarios, s)
+	}
+
+	for i := range scenarios {
+		stepRows, err := m.db.Query(`
+			SELECT id, scenario_id, step_order, name, method, api_path,
+			       headers_json, params_json, body, body_type, auth_type,
+			       auth_token, auth_config_json, assertions_json, extract_vars_json
+			FROM scenario_steps
+			WHERE scenario_id = ?
+			ORDER BY step_order ASC
+		`, scenarios[i].ID)
+		if err != nil {
+			continue
+		}
+
+		var steps []DBScenarioStep
+		for stepRows.Next() {
+			var st DBScenarioStep
+			if err := stepRows.Scan(
+				&st.ID, &st.ScenarioID, &st.StepOrder, &st.Name, &st.Method, &st.ApiPath,
+				&st.HeadersJson, &st.ParamsJson, &st.Body, &st.BodyType, &st.AuthType,
+				&st.AuthToken, &st.AuthConfigJson, &st.AssertionsJson, &st.ExtractVarsJson,
+			); err == nil {
+				// Decrypt sensitive fields
+				if decToken, err := security.DecryptString(st.AuthToken); err == nil {
+					st.AuthToken = decToken
+				}
+				if decConfig, err := security.DecryptString(st.AuthConfigJson); err == nil {
+					st.AuthConfigJson = decConfig
+				}
+				steps = append(steps, st)
+			}
+		}
+		stepRows.Close()
+		scenarios[i].Steps = steps
+	}
+
+	return scenarios, nil
+}
+
+func (m *DBManager) SaveScenario(s DBScenario) error {
+	tx, err := m.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	stopOnErrorInt := 0
+	if s.StopOnError {
+		stopOnErrorInt = 1
+	}
+
+	_, err = tx.Exec(`
+		INSERT INTO scenarios (id, name, description, base_url, stop_on_error, delay_ms)
+		VALUES (?, ?, ?, ?, ?, ?)
+		ON CONFLICT(id) DO UPDATE SET
+			name = excluded.name,
+			description = excluded.description,
+			base_url = excluded.base_url,
+			stop_on_error = excluded.stop_on_error,
+			delay_ms = excluded.delay_ms
+	`, s.ID, s.Name, s.Description, s.BaseURL, stopOnErrorInt, s.DelayMs)
+	if err != nil {
+		return err
+	}
+
+	if _, err := tx.Exec("DELETE FROM scenario_steps WHERE scenario_id = ?", s.ID); err != nil {
+		return err
+	}
+
+	for idx, st := range s.Steps {
+		encToken, err := security.EncryptString(st.AuthToken)
+		if err != nil {
+			encToken = st.AuthToken
+		}
+		encConfig, err := security.EncryptString(st.AuthConfigJson)
+		if err != nil {
+			encConfig = st.AuthConfigJson
+		}
+
+		stepOrder := st.StepOrder
+		if stepOrder <= 0 {
+			stepOrder = idx + 1
+		}
+
+		_, err = tx.Exec(`
+			INSERT INTO scenario_steps (
+				id, scenario_id, step_order, name, method, api_path,
+				headers_json, params_json, body, body_type, auth_type,
+				auth_token, auth_config_json, assertions_json, extract_vars_json
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		`, st.ID, s.ID, stepOrder, st.Name, st.Method, st.ApiPath,
+			st.HeadersJson, st.ParamsJson, st.Body, st.BodyType, st.AuthType,
+			encToken, encConfig, st.AssertionsJson, st.ExtractVarsJson)
+		if err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit()
+}
+
+func (m *DBManager) DeleteScenario(id string) error {
+	tx, err := m.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.Exec("DELETE FROM scenario_steps WHERE scenario_id = ?", id); err != nil {
+		return err
+	}
+	if _, err := tx.Exec("DELETE FROM scenarios WHERE id = ?", id); err != nil {
+		return err
+	}
+	return tx.Commit()
 }

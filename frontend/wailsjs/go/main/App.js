@@ -42,6 +42,10 @@ export function DeleteRequestInDB(arg1) {
   return window['go']['main']['App']['DeleteRequestInDB'](arg1);
 }
 
+export function DeleteScenarioFromDB(arg1) {
+  return window['go']['main']['App']['DeleteScenarioFromDB'](arg1);
+}
+
 export function ExecuteLoadTest(arg1, arg2, arg3, arg4, arg5, arg6) {
   return window['go']['main']['App']['ExecuteLoadTest'](arg1, arg2, arg3, arg4, arg5, arg6);
 }
@@ -66,6 +70,10 @@ export function GetEnvironmentsFromDB() {
   return window['go']['main']['App']['GetEnvironmentsFromDB']();
 }
 
+export function GetScenariosFromDB() {
+  return window['go']['main']['App']['GetScenariosFromDB']();
+}
+
 export function GetUpdateStatus() {
   return window['go']['main']['App']['GetUpdateStatus']();
 }
@@ -76,6 +84,10 @@ export function SaveAllEnvironmentsToDB(arg1) {
 
 export function SaveEnvironmentToDB(arg1) {
   return window['go']['main']['App']['SaveEnvironmentToDB'](arg1);
+}
+
+export function SaveScenarioToDB(arg1) {
+  return window['go']['main']['App']['SaveScenarioToDB'](arg1);
 }
 
 export function StartDownloadUpdate(arg1, arg2, arg3) {
