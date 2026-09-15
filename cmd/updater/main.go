@@ -63,11 +63,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Keep previous version binary intact for historical preservation
-	if finalTarget != *target {
-		logf("[updater] preserved previous version binary: %s", *target)
-	}
-
 	// ── Step 4: Verify new binary ────────────────────────────────────────────
 	fi, err := os.Stat(finalTarget)
 	if err != nil || fi.Size() == 0 {
@@ -100,8 +95,16 @@ func main() {
 	logf("[updater] new app started (PID=%d)", cmd.Process.Pid)
 
 	// ── Step 7: Cleanup ──────────────────────────────────────────────────────
-	_ = os.Remove(backup)
-	_ = os.Remove(*source)
+	_ = removeFileWithRetry(backup)
+	_ = removeFileWithRetry(*source)
+	if finalTarget != *target {
+		logf("[updater] removing old application executable: %s", *target)
+		if err := removeFileWithRetry(*target); err != nil {
+			logf("[updater] WARNING: could not remove old binary %s: %v", *target, err)
+		} else {
+			logf("[updater] successfully deleted old version binary: %s", *target)
+		}
+	}
 	logf("[updater] cleanup done — exiting")
 }
 
@@ -177,4 +180,17 @@ func rollback(backup, target string) {
 
 func logf(format string, args ...any) {
 	log.Printf(format, args...)
+}
+
+func removeFileWithRetry(path string) error {
+	var lastErr error
+	for attempt := 1; attempt <= 15; attempt++ {
+		err := os.Remove(path)
+		if err == nil || os.IsNotExist(err) {
+			return nil
+		}
+		lastErr = err
+		time.Sleep(300 * time.Millisecond)
+	}
+	return lastErr
 }
