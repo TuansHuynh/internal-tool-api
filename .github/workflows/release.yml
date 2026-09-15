@@ -48,8 +48,8 @@ jobs:
         shell: pwsh
         run: |
           $v = (Get-Content version.json | ConvertFrom-Json).version
-          echo "version=$v" >> $env:GITHUB_OUTPUT
-          echo "Version: $v"
+          "version=$v" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          Write-Host "Version: $v"
 
       - name: Build updater (Windows)
         run: |
@@ -167,6 +167,9 @@ jobs:
         id: sha
         run: |
           V="${{ needs.build-windows.outputs.version }}"
+          if [ -z "$V" ]; then
+            V=$(cat version.json | python3 -c "import sys,json; print(json.load(sys.stdin)['version'])")
+          fi
           APP="${{ env.APP_NAME }}"
 
           WIN_EXE="dist/windows/${APP}-v${V}.exe"
