@@ -31,17 +31,26 @@ console.log('====================================================');
 console.log(`📦 ARCHIVING BUILD TO: releases/${majorFolder}/${subVersionFolder}`);
 console.log('====================================================');
 
-// 2. Find built executables in build/bin
+// 2. Find and archive the built executable in build/bin
 if (fs.existsSync(BUILD_BIN_DIR)) {
-  const files = fs.readdirSync(BUILD_BIN_DIR);
-  for (const file of files) {
-    if (file.endsWith('.exe')) {
-      const src = path.join(BUILD_BIN_DIR, file);
-      // Standardize output name to: Internal Tool API_v{version}.exe
-      const standardName = file === 'updater.exe' ? 'updater.exe' : `Internal Tool API_v${version}.exe`;
-      const dest = path.join(targetDir, standardName);
-      fs.copyFileSync(src, dest);
-      console.log(`✅ Archived: releases/${majorFolder}/${subVersionFolder}/${standardName}`);
+  const standardName = `Internal Tool API_v${version}.exe`;
+  const exactPath = path.join(BUILD_BIN_DIR, standardName);
+
+  if (fs.existsSync(exactPath)) {
+    const dest = path.join(targetDir, standardName);
+    fs.copyFileSync(exactPath, dest);
+    console.log(`✅ Archived: releases/${majorFolder}/${subVersionFolder}/${standardName}`);
+  } else {
+    // Fallback if named differently by wails
+    const files = fs.readdirSync(BUILD_BIN_DIR);
+    for (const file of files) {
+      if (file.endsWith('.exe') && file !== 'updater.exe') {
+        const src = path.join(BUILD_BIN_DIR, file);
+        const dest = path.join(targetDir, standardName);
+        fs.copyFileSync(src, dest);
+        console.log(`✅ Archived: releases/${majorFolder}/${subVersionFolder}/${standardName}`);
+        break;
+      }
     }
   }
 }

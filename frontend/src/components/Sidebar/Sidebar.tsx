@@ -584,35 +584,6 @@ export default function Sidebar({ onOpenEnvModal, onOpenAutomationModal }: Sideb
               </span>
             </div>
           </div>
-
-          <button
-            onClick={() => BrowserOpenURL('https://tuanshuynh.github.io/buy-me-coffee/')}
-            title="Ủng hộ tác giả qua Buy Me a Coffee (https://tuanshuynh.github.io/buy-me-coffee/)"
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px',
-              background: 'rgba(245, 158, 11, 0.15)',
-              border: '1px solid rgba(245, 158, 11, 0.35)',
-              color: '#fbbf24',
-              padding: '3px 8px',
-              borderRadius: '6px',
-              fontSize: '11px',
-              fontWeight: 700,
-              cursor: 'pointer',
-              transition: 'all 0.15s ease'
-            }}
-            onMouseEnter={e => {
-              e.currentTarget.style.background = 'rgba(245, 158, 11, 0.25)';
-              e.currentTarget.style.borderColor = 'rgba(245, 158, 11, 0.6)';
-            }}
-            onMouseLeave={e => {
-              e.currentTarget.style.background = 'rgba(245, 158, 11, 0.15)';
-              e.currentTarget.style.borderColor = 'rgba(245, 158, 11, 0.35)';
-            }}
-          >
-            <span>☕</span> Donate
-          </button>
         </div>
 
         {/* Row 2: Quick Actions (Import / Export) */}

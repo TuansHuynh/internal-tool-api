@@ -7,7 +7,9 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 )
 
@@ -105,6 +107,28 @@ func main() {
 			logf("[updater] successfully deleted old version binary: %s", *target)
 		}
 	}
+
+	// Scan and remove any lingering legacy executable versions in the same folder
+	dir := filepath.Dir(finalTarget)
+	if entries, err := os.ReadDir(dir); err == nil {
+		for _, entry := range entries {
+			if entry.IsDir() {
+				continue
+			}
+			name := entry.Name()
+			fullPath := filepath.Join(dir, name)
+			// Skip current new target, backup, source, and updater
+			if fullPath == finalTarget || fullPath == backup || fullPath == *source || name == "updater.exe" {
+				continue
+			}
+			// If it's a legacy version of this application
+			if (strings.HasPrefix(name, "internal-api-client") || strings.HasPrefix(name, "Internal Tool API_v")) && strings.HasSuffix(name, ".exe") {
+				logf("[updater] cleaning up leftover older version: %s", fullPath)
+				_ = removeFileWithRetry(fullPath)
+			}
+		}
+	}
+
 	logf("[updater] cleanup done — exiting")
 }
 

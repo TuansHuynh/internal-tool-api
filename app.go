@@ -91,6 +91,32 @@ func NewApp() *App {
 
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+
+	// Clean up any lingering .bak files in background
+	go func() {
+		exePath, err := os.Executable()
+		if err != nil {
+			return
+		}
+		dir := filepath.Dir(exePath)
+		currentExe := filepath.Base(exePath)
+
+		if entries, err := os.ReadDir(dir); err == nil {
+			for _, entry := range entries {
+				if entry.IsDir() {
+					continue
+				}
+				name := entry.Name()
+				if name == currentExe || name == "updater.exe" {
+					continue
+				}
+				// Remove old backup files
+				if strings.HasSuffix(name, ".bak") {
+					_ = os.Remove(filepath.Join(dir, name))
+				}
+			}
+		}
+	}()
 }
 
 // ─── App Info ─────────────────────────────────────────────────────────────────
