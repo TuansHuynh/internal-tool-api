@@ -63,15 +63,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	// If renamed, remove the old version binary (with retries if locked)
+	// Keep previous version binary intact for historical preservation
 	if finalTarget != *target {
-		logf("[updater] removing old binary: %s", *target)
-		for attempt := 1; attempt <= 10; attempt++ {
-			if err := os.Remove(*target); err == nil || os.IsNotExist(err) {
-				break
-			}
-			time.Sleep(200 * time.Millisecond)
-		}
+		logf("[updater] preserved previous version binary: %s", *target)
 	}
 
 	// ── Step 4: Verify new binary ────────────────────────────────────────────
