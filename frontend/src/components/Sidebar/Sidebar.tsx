@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useApp } from '../../context/AppContext';
 import { main } from '../../../wailsjs/go/models';
 import { GetAppInfo } from '../../../wailsjs/go/main/App';
+import { BrowserOpenURL } from '../../../wailsjs/runtime/runtime';
 import appLogo from '../../assets/images/logo.png';
 
 interface SidebarProps {
@@ -583,6 +584,35 @@ export default function Sidebar({ onOpenEnvModal, onOpenAutomationModal }: Sideb
               </span>
             </div>
           </div>
+
+          <button
+            onClick={() => BrowserOpenURL('https://tuanshuynh.github.io/buy-me-coffee/')}
+            title="Ủng hộ tác giả qua Buy Me a Coffee (https://tuanshuynh.github.io/buy-me-coffee/)"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              background: 'rgba(245, 158, 11, 0.15)',
+              border: '1px solid rgba(245, 158, 11, 0.35)',
+              color: '#fbbf24',
+              padding: '3px 8px',
+              borderRadius: '6px',
+              fontSize: '11px',
+              fontWeight: 700,
+              cursor: 'pointer',
+              transition: 'all 0.15s ease'
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.background = 'rgba(245, 158, 11, 0.25)';
+              e.currentTarget.style.borderColor = 'rgba(245, 158, 11, 0.6)';
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.background = 'rgba(245, 158, 11, 0.15)';
+              e.currentTarget.style.borderColor = 'rgba(245, 158, 11, 0.35)';
+            }}
+          >
+            <span>☕</span> Donate
+          </button>
         </div>
 
         {/* Row 2: Quick Actions (Import / Export) */}
@@ -1127,6 +1157,39 @@ export default function Sidebar({ onOpenEnvModal, onOpenAutomationModal }: Sideb
             <span>🌐</span> Quản lý Biến Môi trường
           </button>
         )}
+
+        {/* Buy Me a Coffee Button */}
+        <button
+          onClick={() => BrowserOpenURL('https://tuanshuynh.github.io/buy-me-coffee/')}
+          title="Ủng hộ tác giả qua Buy Me a Coffee (https://tuanshuynh.github.io/buy-me-coffee/)"
+          style={{
+            width: '100%',
+            padding: '6px 10px',
+            borderRadius: '6px',
+            background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.15) 0%, rgba(217, 119, 6, 0.25) 100%)',
+            border: '1px solid rgba(245, 158, 11, 0.4)',
+            color: '#fbbf24',
+            fontSize: '12px',
+            fontWeight: 700,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '6px',
+            cursor: 'pointer',
+            boxShadow: '0 2px 8px rgba(245, 158, 11, 0.15)',
+            transition: 'all 0.15s ease'
+          }}
+          onMouseEnter={e => {
+            e.currentTarget.style.background = 'linear-gradient(135deg, rgba(245, 158, 11, 0.3) 0%, rgba(217, 119, 6, 0.45) 100%)';
+            e.currentTarget.style.borderColor = 'rgba(245, 158, 11, 0.6)';
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.background = 'linear-gradient(135deg, rgba(245, 158, 11, 0.15) 0%, rgba(217, 119, 6, 0.25) 100%)';
+            e.currentTarget.style.borderColor = 'rgba(245, 158, 11, 0.4)';
+          }}
+        >
+          <span style={{ fontSize: '13px' }}>☕</span> Buy Me a Coffee
+        </button>
       </div>
 
       {/* Action Hover Styles */}
