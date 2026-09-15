@@ -1,6 +1,6 @@
 {
   "name": "internal-api-client",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "Cross-platform Internal API Client with Stress Testing & SQLite persistence",
   "private": true,
   "scripts": {
