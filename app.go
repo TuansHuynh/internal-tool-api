@@ -229,12 +229,7 @@ func (a *App) ApplyUpdate() error {
 		return fmt.Errorf("resolve current executable: %w", err)
 	}
 
-	// Resolve the executable destination (Internal Tool API.exe)
-	dir := filepath.Dir(exePath)
-	ext := filepath.Ext(exePath)
-	newTargetName := fmt.Sprintf("Internal Tool API%s", ext)
-	newTargetPath := filepath.Join(dir, newTargetName)
-
+	// Cài đè trực tiếp vào đúng file exe hiện tại (In-place overwrite)
 	binary := getUpdaterBinary()
 	// In dev builds the stub is just a text placeholder (<100 bytes).
 	if len(binary) < 1024 {
@@ -242,11 +237,11 @@ func (a *App) ApplyUpdate() error {
 	}
 
 	pid := os.Getpid()
-	if err = updater.LaunchUpdaterProcess(binary, pid, src, exePath, newTargetPath); err != nil {
+	if err = updater.LaunchUpdaterProcess(binary, pid, src, exePath, exePath); err != nil {
 		return fmt.Errorf("launch updater: %w", err)
 	}
 
-	log.Printf("[app] updater launched (replacing %s with %s) — quitting (PID=%d)", exePath, newTargetPath, pid)
+	log.Printf("[app] updater launched (in-place overwrite: %s) — quitting (PID=%d)", exePath, pid)
 	wailsRuntime.Quit(a.ctx)
 	return nil
 }
