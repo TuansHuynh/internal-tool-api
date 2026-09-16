@@ -224,6 +224,68 @@ export function extractStepVariables(
 }
 
 /**
+ * Flexible header parser that supports:
+ * - Array of { key, value, enabled }
+ * - Array of { "Key": "Value" }
+ * - Object { "Key": "Value" }
+ * - Multiline string "Key: Value" or "Key=Value"
+ */
+export function parseHeadersToMap(headersInput: string, context: Record<string, any>): Record<string, string> {
+  const headersMap: Record<string, string> = {};
+  if (!headersInput || !headersInput.trim()) return headersMap;
+
+  try {
+    const parsed = JSON.parse(headersInput);
+    if (Array.isArray(parsed)) {
+      parsed.forEach((h: any) => {
+        if (h && typeof h === 'object') {
+          if ('key' in h) {
+            // Standard format { key, value, enabled }
+            if (h.enabled !== false && h.key && String(h.key).trim() !== '') {
+              headersMap[resolveTemplateVariables(String(h.key).trim(), context)] = resolveTemplateVariables(String(h.value ?? ''), context);
+            }
+          } else {
+            // Single/multi-key object e.g. { "apikey": "..." }
+            Object.entries(h).forEach(([k, v]) => {
+              if (k && k.trim() !== '') {
+                headersMap[resolveTemplateVariables(k.trim(), context)] = resolveTemplateVariables(String(v ?? ''), context);
+              }
+            });
+          }
+        }
+      });
+    } else if (parsed && typeof parsed === 'object') {
+      // Direct object { "apikey": "...", "Authorization": "..." }
+      Object.entries(parsed).forEach(([k, v]) => {
+        if (k && k.trim() !== '') {
+          headersMap[resolveTemplateVariables(k.trim(), context)] = resolveTemplateVariables(String(v ?? ''), context);
+        }
+      });
+    }
+  } catch {
+    // If not JSON, parse as newline-delimited key: value
+    const lines = headersInput.split('\n');
+    lines.forEach(line => {
+      const clean = line.trim();
+      if (!clean || clean.startsWith('#') || clean.startsWith('//')) return;
+      const colonIdx = clean.indexOf(':');
+      const eqIdx = clean.indexOf('=');
+      if (colonIdx > -1) {
+        const k = clean.substring(0, colonIdx).trim();
+        const v = clean.substring(colonIdx + 1).trim();
+        if (k) headersMap[resolveTemplateVariables(k, context)] = resolveTemplateVariables(v, context);
+      } else if (eqIdx > -1) {
+        const k = clean.substring(0, eqIdx).trim();
+        const v = clean.substring(eqIdx + 1).trim();
+        if (k) headersMap[resolveTemplateVariables(k, context)] = resolveTemplateVariables(v, context);
+      }
+    });
+  }
+
+  return headersMap;
+}
+
+/**
  * Scenario Execution Engine
  * Executes all steps in order, chaining variables, asserting results, and emitting progress
  */
@@ -267,20 +329,8 @@ export async function runScenario(
     }
     targetUrl = resolveTemplateVariables(targetUrl, context);
 
-    // Build Headers
-    const headersMap: Record<string, string> = {};
-    try {
-      const headersList = JSON.parse(step.headersJson || '[]');
-      if (Array.isArray(headersList)) {
-        headersList.forEach((h: any) => {
-          if (h.enabled && h.key && h.key.trim() !== '') {
-            headersMap[resolveTemplateVariables(h.key.trim(), context)] = resolveTemplateVariables(h.value || '', context);
-          }
-        });
-      }
-    } catch {
-      // Ignore header parse error
-    }
+    // Build Headers using flexible parser
+    const headersMap = parseHeadersToMap(step.headersJson || '[]', context);
 
     // Auth injection if configured
     if (step.authType === 'bearer' && step.authToken) {

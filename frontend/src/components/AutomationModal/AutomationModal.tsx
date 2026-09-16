@@ -135,6 +135,7 @@ export default function AutomationModal({ isOpen, onClose }: AutomationModalProp
   // Step builder editing state
   const [selectedStepIndex, setSelectedStepIndex] = useState<number>(0);
   const [selectedSubTab, setSelectedSubTab] = useState<'request' | 'assertions' | 'extract'>('request');
+  const [headersEditorMode, setHeadersEditorMode] = useState<'table' | 'raw'>('table');
 
   // Execution state
   const [isRunning, setIsRunning] = useState<boolean>(false);
@@ -142,6 +143,8 @@ export default function AutomationModal({ isOpen, onClose }: AutomationModalProp
   const [stepResults, setStepResults] = useState<StepExecutionResult[]>([]);
   const [runSummary, setRunSummary] = useState<ScenarioRunSummary | null>(null);
   const [inspectedStepResult, setInspectedStepResult] = useState<StepExecutionResult | null>(null);
+  const [responseFormatMode, setResponseFormatMode] = useState<'pretty' | 'raw'>('pretty');
+  const [copiedResponse, setCopiedResponse] = useState<boolean>(false);
 
   const cancelRef = useRef<boolean>(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -259,6 +262,143 @@ export default function AutomationModal({ isOpen, onClose }: AutomationModalProp
       }
       return { ...sc, steps: updatedSteps };
     });
+  };
+
+  // Helper to parse headers JSON into editable rows
+  const parseStepHeaders = (headersJson: string) => {
+    if (!headersJson || !headersJson.trim()) return [];
+    try {
+      const parsed = JSON.parse(headersJson);
+      if (Array.isArray(parsed)) {
+        return parsed.map((item, idx) => {
+          if (item && typeof item === 'object') {
+            if ('key' in item) {
+              return {
+                id: item.id || `h_${idx}_${Date.now()}`,
+                key: String(item.key || ''),
+                value: String(item.value ?? ''),
+                enabled: item.enabled !== false
+              };
+            } else {
+              const entries = Object.entries(item);
+              if (entries.length > 0) {
+                return {
+                  id: `h_${idx}_${Date.now()}`,
+                  key: entries[0][0],
+                  value: String(entries[0][1] ?? ''),
+                  enabled: true
+                };
+              }
+            }
+          }
+          return {
+            id: `h_${idx}_${Date.now()}`,
+            key: '',
+            value: '',
+            enabled: true
+          };
+        });
+      } else if (parsed && typeof parsed === 'object') {
+        return Object.entries(parsed).map(([k, v], idx) => ({
+          id: `h_${idx}_${Date.now()}`,
+          key: k,
+          value: String(v ?? ''),
+          enabled: true
+        }));
+      }
+    } catch {
+      const lines = headersJson.split('\n');
+      const rows: any[] = [];
+      lines.forEach((line, idx) => {
+        const clean = line.trim();
+        if (!clean) return;
+        const colonIdx = clean.indexOf(':');
+        if (colonIdx > -1) {
+          rows.push({
+            id: `h_${idx}_${Date.now()}`,
+            key: clean.substring(0, colonIdx).trim(),
+            value: clean.substring(colonIdx + 1).trim(),
+            enabled: true
+          });
+        }
+      });
+      return rows;
+    }
+    return [];
+  };
+
+  const currentStepHeaders = React.useMemo(() => {
+    return parseStepHeaders(currentStep?.headersJson || '[]');
+  }, [currentStep?.headersJson]);
+
+  const handleUpdateStepHeaders = (newHeaders: Array<{ id: string; key: string; value: string; enabled: boolean }>) => {
+    updateCurrentStep({
+      headersJson: JSON.stringify(newHeaders.map(h => ({
+        id: h.id,
+        key: h.key,
+        value: h.value,
+        enabled: h.enabled
+      })), null, 2)
+    });
+  };
+
+  const handleAddHeaderRow = (defaultKey = '', defaultValue = '') => {
+    const newRow = {
+      id: `hdr_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      key: defaultKey,
+      value: defaultValue,
+      enabled: true
+    };
+    handleUpdateStepHeaders([...currentStepHeaders, newRow]);
+  };
+
+  const handleUpdateHeaderRow = (id: string, field: 'key' | 'value' | 'enabled', val: any) => {
+    const next = currentStepHeaders.map((h: any) => h.id === id ? { ...h, [field]: val } : h);
+    handleUpdateStepHeaders(next);
+  };
+
+  const handleRemoveHeaderRow = (id: string) => {
+    const next = currentStepHeaders.filter((h: any) => h.id !== id);
+    handleUpdateStepHeaders(next);
+  };
+
+  const handleAddPresetHeader = (key: string, value: string) => {
+    const existingIdx = currentStepHeaders.findIndex((h: any) => h.key.toLowerCase() === key.toLowerCase());
+    if (existingIdx > -1) {
+      const next = [...currentStepHeaders];
+      next[existingIdx] = { ...next[existingIdx], value, enabled: true };
+      handleUpdateStepHeaders(next);
+    } else {
+      handleAddHeaderRow(key, value);
+    }
+  };
+
+  const handleFormatRequestBody = () => {
+    if (!currentStep || !currentStep.body || !currentStep.body.trim()) return;
+    try {
+      const parsed = JSON.parse(currentStep.body);
+      updateCurrentStep({ body: JSON.stringify(parsed, null, 2) });
+    } catch {
+      alert('Nội dung Request Body không phải là cú pháp JSON hợp lệ để làm đẹp!');
+    }
+  };
+
+  const getFormattedResponseBody = () => {
+    if (!inspectedStepResult?.responseBody) return '(Rỗng)';
+    if (responseFormatMode === 'raw') return inspectedStepResult.responseBody;
+    try {
+      const parsed = JSON.parse(inspectedStepResult.responseBody);
+      return JSON.stringify(parsed, null, 2);
+    } catch {
+      return inspectedStepResult.responseBody;
+    }
+  };
+
+  const handleCopyResponseBody = () => {
+    if (!inspectedStepResult?.responseBody) return;
+    navigator.clipboard.writeText(getFormattedResponseBody());
+    setCopiedResponse(true);
+    setTimeout(() => setCopiedResponse(false), 2000);
   };
 
   // Create New Scenario
@@ -1068,45 +1208,325 @@ export default function AutomationModal({ isOpen, onClose }: AutomationModalProp
                 {/* SUBTAB 1: REQUEST HEADERS & BODY */}
                 {selectedSubTab === 'request' && (
                   <div style={{ flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                    {/* Headers Editor */}
-                    <div>
-                      <div style={{ fontSize: '12px', fontWeight: 700, color: '#94a3b8', marginBottom: '6px' }}>
-                        Headers gửi kèm (JSON hoặc Key-Value):
+                    {/* Headers Editor Section */}
+                    <div style={{
+                      background: '#090f1d',
+                      border: '1px solid #1e293b',
+                      borderRadius: '8px',
+                      padding: '12px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '10px'
+                    }}>
+                      {/* Top Bar for Headers */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span style={{ fontSize: '13px', fontWeight: 700, color: '#f1f5f9', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span>📋</span> Headers gửi kèm
+                          </span>
+                          <span style={{
+                            fontSize: '11px',
+                            fontWeight: 600,
+                            background: currentStepHeaders.length > 0 ? 'rgba(56, 189, 248, 0.15)' : 'rgba(148, 163, 184, 0.1)',
+                            color: currentStepHeaders.length > 0 ? '#38bdf8' : '#94a3b8',
+                            padding: '1px 7px',
+                            borderRadius: '10px',
+                            border: `1px solid ${currentStepHeaders.length > 0 ? 'rgba(56, 189, 248, 0.3)' : 'rgba(148, 163, 184, 0.2)'}`
+                          }}>
+                            {currentStepHeaders.length} {currentStepHeaders.length === 1 ? 'header' : 'headers'}
+                          </span>
+                        </div>
+
+                        {/* Quick Presets & Actions */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          {headersEditorMode === 'table' && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => handleAddHeaderRow()}
+                                style={{
+                                  padding: '4px 10px',
+                                  background: 'rgba(56, 189, 248, 0.15)',
+                                  border: '1px solid rgba(56, 189, 248, 0.3)',
+                                  color: '#38bdf8',
+                                  borderRadius: '5px',
+                                  fontSize: '11px',
+                                  fontWeight: 600,
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '4px'
+                                }}
+                              >
+                                <span>+</span> Thêm Header
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => handleAddPresetHeader('Content-Type', 'application/json')}
+                                title="Thêm header Content-Type: application/json"
+                                style={{
+                                  padding: '4px 8px',
+                                  background: '#131e36',
+                                  border: '1px solid #233554',
+                                  color: '#94a3b8',
+                                  borderRadius: '5px',
+                                  fontSize: '11px',
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                + JSON
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => handleAddPresetHeader('apikey', 'sb_publishable_...')}
+                                title="Thêm header apikey cho Supabase"
+                                style={{
+                                  padding: '4px 8px',
+                                  background: '#131e36',
+                                  border: '1px solid #233554',
+                                  color: '#34d399',
+                                  borderRadius: '5px',
+                                  fontSize: '11px',
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                + apikey
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => handleAddPresetHeader('Authorization', 'Bearer {{authToken}}')}
+                                title="Thêm header Authorization: Bearer token"
+                                style={{
+                                  padding: '4px 8px',
+                                  background: '#131e36',
+                                  border: '1px solid #233554',
+                                  color: '#fbbf24',
+                                  borderRadius: '5px',
+                                  fontSize: '11px',
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                + Bearer
+                              </button>
+                            </>
+                          )}
+
+                          {/* Toggle View Mode */}
+                          <div style={{
+                            display: 'flex',
+                            background: '#070b14',
+                            border: '1px solid #1e293b',
+                            borderRadius: '5px',
+                            padding: '2px',
+                            marginLeft: '4px'
+                          }}>
+                            <button
+                              type="button"
+                              onClick={() => setHeadersEditorMode('table')}
+                              style={{
+                                padding: '3px 8px',
+                                fontSize: '10px',
+                                fontWeight: 600,
+                                background: headersEditorMode === 'table' ? '#1e293b' : 'transparent',
+                                color: headersEditorMode === 'table' ? '#38bdf8' : '#64748b',
+                                border: 'none',
+                                borderRadius: '4px',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              Bảng
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setHeadersEditorMode('raw')}
+                              style={{
+                                padding: '3px 8px',
+                                fontSize: '10px',
+                                fontWeight: 600,
+                                background: headersEditorMode === 'raw' ? '#1e293b' : 'transparent',
+                                color: headersEditorMode === 'raw' ? '#38bdf8' : '#64748b',
+                                border: 'none',
+                                borderRadius: '4px',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              JSON
+                            </button>
+                          </div>
+                        </div>
                       </div>
-                      <textarea
-                        rows={4}
-                        value={currentStep.headersJson}
-                        onChange={e => updateCurrentStep({ headersJson: e.target.value })}
-                        placeholder={`[{"key": "Content-Type", "value": "application/json", "enabled": true}]`}
-                        style={{
-                          width: '100%',
-                          fontSize: '12px',
-                          padding: '8px 10px',
-                          background: '#0a0f1d',
-                          color: '#f8fafc',
-                          border: '1px solid #334155',
-                          borderRadius: '6px',
-                          fontFamily: 'monospace',
-                          boxSizing: 'border-box'
-                        }}
-                      />
+
+                      {/* Header Keys Autocomplete Datalist */}
+                      <datalist id="scenario-common-header-keys">
+                        <option value="Content-Type" />
+                        <option value="Authorization" />
+                        <option value="apikey" />
+                        <option value="Accept" />
+                        <option value="Prefer" />
+                        <option value="X-API-Key" />
+                        <option value="User-Agent" />
+                        <option value="Cache-Control" />
+                        <option value="Origin" />
+                      </datalist>
+
+                      {/* TABLE VIEW */}
+                      {headersEditorMode === 'table' ? (
+                        <div style={{ border: '1px solid #1e293b', borderRadius: '6px', overflow: 'hidden', background: '#070b14' }}>
+                          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                            <thead>
+                              <tr style={{ background: '#0b1329', borderBottom: '1px solid #1e293b', color: '#94a3b8', textAlign: 'left' }}>
+                                <th style={{ width: '40px', padding: '6px', textAlign: 'center' }}>Bật</th>
+                                <th style={{ width: '38%', padding: '6px 10px' }}>Tên Header (Key)</th>
+                                <th style={{ padding: '6px 10px' }}>Giá trị (Value / {'{{biến}}'})</th>
+                                <th style={{ width: '40px', padding: '6px', textAlign: 'center' }}>Xóa</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {currentStepHeaders.map((row) => (
+                                <tr key={row.id} style={{ borderBottom: '1px solid rgba(30, 41, 59, 0.6)' }}>
+                                  <td style={{ padding: '6px', textAlign: 'center' }}>
+                                    <input
+                                      type="checkbox"
+                                      checked={row.enabled}
+                                      onChange={(e) => handleUpdateHeaderRow(row.id, 'enabled', e.target.checked)}
+                                      style={{ cursor: 'pointer', accentColor: '#38bdf8' }}
+                                    />
+                                  </td>
+                                  <td style={{ padding: '4px 8px' }}>
+                                    <input
+                                      type="text"
+                                      list="scenario-common-header-keys"
+                                      placeholder="e.g. apikey, Authorization, Content-Type"
+                                      value={row.key}
+                                      onChange={(e) => handleUpdateHeaderRow(row.id, 'key', e.target.value)}
+                                      style={{
+                                        width: '100%',
+                                        padding: '5px 8px',
+                                        background: '#0d1527',
+                                        border: '1px solid #1e293b',
+                                        borderRadius: '4px',
+                                        color: '#f8fafc',
+                                        fontSize: '12px',
+                                        fontFamily: 'monospace',
+                                        boxSizing: 'border-box'
+                                      }}
+                                    />
+                                  </td>
+                                  <td style={{ padding: '4px 8px' }}>
+                                    <input
+                                      type="text"
+                                      placeholder="e.g. Bearer {{authToken}} hoặc token value"
+                                      value={row.value}
+                                      onChange={(e) => handleUpdateHeaderRow(row.id, 'value', e.target.value)}
+                                      style={{
+                                        width: '100%',
+                                        padding: '5px 8px',
+                                        background: '#0d1527',
+                                        border: '1px solid #1e293b',
+                                        borderRadius: '4px',
+                                        color: '#38bdf8',
+                                        fontSize: '12px',
+                                        fontFamily: 'monospace',
+                                        boxSizing: 'border-box'
+                                      }}
+                                    />
+                                  </td>
+                                  <td style={{ padding: '6px', textAlign: 'center' }}>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRemoveHeaderRow(row.id)}
+                                      style={{
+                                        background: 'transparent',
+                                        border: 'none',
+                                        color: '#ef4444',
+                                        fontSize: '13px',
+                                        cursor: 'pointer',
+                                        padding: '2px 6px',
+                                        borderRadius: '4px'
+                                      }}
+                                      title="Xóa header này"
+                                    >
+                                      ✕
+                                    </button>
+                                  </td>
+                                </tr>
+                              ))}
+                              {currentStepHeaders.length === 0 && (
+                                <tr>
+                                  <td colSpan={4} style={{ padding: '16px', textAlign: 'center', color: '#64748b', fontSize: '12px' }}>
+                                    <div>Chưa có Header nào. Nhấn <strong>"+ Thêm Header"</strong> hoặc chọn nhanh các preset phía trên.</div>
+                                  </td>
+                                </tr>
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+                      ) : (
+                        /* RAW JSON VIEW */
+                        <div>
+                          <textarea
+                            rows={4}
+                            value={currentStep.headersJson}
+                            onChange={e => updateCurrentStep({ headersJson: e.target.value })}
+                            placeholder={`[{"key": "Content-Type", "value": "application/json", "enabled": true}]`}
+                            style={{
+                              width: '100%',
+                              fontSize: '12px',
+                              padding: '8px 10px',
+                              background: '#070b14',
+                              color: '#f8fafc',
+                              border: '1px solid #1e293b',
+                              borderRadius: '6px',
+                              fontFamily: 'monospace',
+                              boxSizing: 'border-box'
+                            }}
+                          />
+                        </div>
+                      )}
                     </div>
 
                     {/* Request Body */}
                     <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px', flexWrap: 'wrap', gap: '6px' }}>
                         <span style={{ fontSize: '12px', fontWeight: 700, color: '#94a3b8' }}>
                           Request Body (Hỗ trợ biến dạng <code>{'{{variable_name}}'}</code>):
                         </span>
-                        <select
-                          value={currentStep.bodyType}
-                          onChange={e => updateCurrentStep({ bodyType: e.target.value })}
-                          style={{ padding: '2px 8px', fontSize: '11px', background: '#111827', color: '#fff', border: '1px solid #334155' }}
-                        >
-                          <option value="json">JSON</option>
-                          <option value="raw">Raw / Text</option>
-                          <option value="none">None</option>
-                        </select>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          {currentStep.bodyType === 'json' && (
+                            <button
+                              type="button"
+                              onClick={handleFormatRequestBody}
+                              style={{
+                                padding: '2px 8px',
+                                fontSize: '11px',
+                                fontWeight: 600,
+                                background: 'rgba(56, 189, 248, 0.15)',
+                                color: '#38bdf8',
+                                border: '1px solid rgba(56, 189, 248, 0.3)',
+                                borderRadius: '4px',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '3px'
+                              }}
+                              title="Làm đẹp (Format JSON)"
+                            >
+                              <span>✨</span> Làm đẹp JSON
+                            </button>
+                          )}
+                          <select
+                            value={currentStep.bodyType}
+                            onChange={e => updateCurrentStep({ bodyType: e.target.value })}
+                            style={{ padding: '2px 8px', fontSize: '11px', background: '#111827', color: '#fff', border: '1px solid #334155', borderRadius: '4px' }}
+                          >
+                            <option value="json">JSON</option>
+                            <option value="raw">Raw / Text</option>
+                            <option value="none">None</option>
+                          </select>
+                        </div>
                       </div>
                       <textarea
                         rows={9}
@@ -1657,24 +2077,112 @@ export default function AutomationModal({ isOpen, onClose }: AutomationModalProp
                     )}
 
                     {/* Response Body Inspector */}
-                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-                      <div style={{ fontSize: '12px', fontWeight: 700, color: '#94a3b8', marginBottom: '6px' }}>
-                        Response Body:
+                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span style={{ fontSize: '12px', fontWeight: 700, color: '#f1f5f9' }}>
+                            Response Body:
+                          </span>
+                          {inspectedStepResult.responseBody && (
+                            <span style={{
+                              fontSize: '10px',
+                              color: '#94a3b8',
+                              background: 'rgba(148, 163, 184, 0.1)',
+                              padding: '1px 6px',
+                              borderRadius: '4px',
+                              border: '1px solid rgba(148, 163, 184, 0.2)'
+                            }}>
+                              {new Blob([inspectedStepResult.responseBody]).size} bytes
+                            </span>
+                          )}
+                        </div>
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          {/* Beautify / Raw toggle */}
+                          <div style={{
+                            display: 'flex',
+                            background: '#070b14',
+                            border: '1px solid #1e293b',
+                            borderRadius: '5px',
+                            padding: '2px'
+                          }}>
+                            <button
+                              type="button"
+                              onClick={() => setResponseFormatMode('pretty')}
+                              style={{
+                                padding: '3px 8px',
+                                fontSize: '11px',
+                                fontWeight: 600,
+                                background: responseFormatMode === 'pretty' ? '#1e293b' : 'transparent',
+                                color: responseFormatMode === 'pretty' ? '#38bdf8' : '#64748b',
+                                border: 'none',
+                                borderRadius: '4px',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '3px'
+                              }}
+                            >
+                              <span>✨</span> Làm đẹp
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setResponseFormatMode('raw')}
+                              style={{
+                                padding: '3px 8px',
+                                fontSize: '11px',
+                                fontWeight: 600,
+                                background: responseFormatMode === 'raw' ? '#1e293b' : 'transparent',
+                                color: responseFormatMode === 'raw' ? '#38bdf8' : '#64748b',
+                                border: 'none',
+                                borderRadius: '4px',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              Raw
+                            </button>
+                          </div>
+
+                          {/* Copy button */}
+                          <button
+                            type="button"
+                            onClick={handleCopyResponseBody}
+                            style={{
+                              padding: '3px 8px',
+                              fontSize: '11px',
+                              fontWeight: 600,
+                              background: copiedResponse ? 'rgba(16, 185, 129, 0.2)' : '#111827',
+                              color: copiedResponse ? '#10b981' : '#94a3b8',
+                              border: `1px solid ${copiedResponse ? 'rgba(16, 185, 129, 0.4)' : '#334155'}`,
+                              borderRadius: '4px',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '3px'
+                            }}
+                          >
+                            <span>{copiedResponse ? '✓' : '📋'}</span> {copiedResponse ? 'Đã sao chép' : 'Sao chép'}
+                          </button>
+                        </div>
                       </div>
+
                       <pre style={{
                         flex: 1,
                         margin: 0,
                         padding: '12px',
                         background: '#090e1a',
-                        color: '#cbd5e1',
+                        color: '#38bdf8',
                         borderRadius: '6px',
                         border: '1px solid #1e293b',
-                        fontSize: '11px',
+                        fontSize: '12px',
                         fontFamily: 'monospace',
                         overflowX: 'auto',
-                        maxHeight: '260px'
+                        maxHeight: '340px',
+                        lineHeight: '1.5',
+                        whiteSpace: 'pre-wrap',
+                        wordBreak: 'break-word'
                       }}>
-                        {inspectedStepResult.responseBody || '(Rỗng)'}
+                        {getFormattedResponseBody()}
                       </pre>
                     </div>
                   </>
