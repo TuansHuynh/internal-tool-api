@@ -28,7 +28,7 @@ if (fs.existsSync(VERSION_JSON_PATH)) {
   } catch (e) {}
 }
 
-const outputFileName = `Internal Tool API_v${currentVersion}`;
+const outputFileName = appName;
 const buildTime = new Date().toISOString();
 
 // 2. Update version.json
@@ -63,4 +63,4 @@ if (fs.existsSync(ROOT_PKG_PATH)) {
   fs.writeFileSync(ROOT_PKG_PATH, JSON.stringify(rPkg, null, 2) + '\n', 'utf8');
 }
 
-console.log(`[Version Sync] Synced v${currentVersion} (${outputFileName}) across wails.json, version.json & package.json`);
+console.log(`[Version Sync] Synced v${currentVersion} (Binary: ${outputFileName}.exe) across wails.json, version.json & package.json`);

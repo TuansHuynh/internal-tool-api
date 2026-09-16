@@ -86,7 +86,7 @@ function bumpSemver(versionStr, type) {
 
 const newVersion = bumpSemver(currentVersion, bumpType);
 const newAppName = customName || 'Internal Tool API';
-const newOutputFileName = `Internal Tool API_v${newVersion}`;
+const newOutputFileName = newAppName;
 
 console.log('====================================================');
 console.log(`🚀 BUMP VERSION & APP NAME AUTOMATION TOOL`);

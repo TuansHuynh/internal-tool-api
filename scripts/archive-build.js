@@ -33,22 +33,22 @@ console.log('====================================================');
 
 // 2. Find and archive the built executable in build/bin
 if (fs.existsSync(BUILD_BIN_DIR)) {
-  const standardName = `Internal Tool API_v${version}.exe`;
-  const exactPath = path.join(BUILD_BIN_DIR, standardName);
+  const finalExeName = `${appName}.exe`;
+  const exactPath = path.join(BUILD_BIN_DIR, finalExeName);
 
   if (fs.existsSync(exactPath)) {
-    const dest = path.join(targetDir, standardName);
+    const dest = path.join(targetDir, finalExeName);
     fs.copyFileSync(exactPath, dest);
-    console.log(`✅ Archived: releases/${majorFolder}/${subVersionFolder}/${standardName}`);
+    console.log(`✅ Archived: releases/${majorFolder}/${subVersionFolder}/${finalExeName}`);
   } else {
     // Fallback if named differently by wails
     const files = fs.readdirSync(BUILD_BIN_DIR);
     for (const file of files) {
       if (file.endsWith('.exe') && file !== 'updater.exe') {
         const src = path.join(BUILD_BIN_DIR, file);
-        const dest = path.join(targetDir, standardName);
+        const dest = path.join(targetDir, finalExeName);
         fs.copyFileSync(src, dest);
-        console.log(`✅ Archived: releases/${majorFolder}/${subVersionFolder}/${standardName}`);
+        console.log(`✅ Archived: releases/${majorFolder}/${subVersionFolder}/${finalExeName}`);
         break;
       }
     }
@@ -65,10 +65,10 @@ if (fs.existsSync(UPDATER_BIN_PATH)) {
 // 4. Save build metadata
 const metaPath = path.join(targetDir, 'metadata.json');
 const meta = {
-  appName: 'Internal Tool API',
+  appName: appName,
   majorVersion: majorFolder,
   version: subVersionFolder,
-  executableName: `Internal Tool API_v${version}.exe`,
+  executableName: `${appName}.exe`,
   archivedAt: new Date().toISOString(),
   files: fs.readdirSync(targetDir)
 };

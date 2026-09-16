@@ -218,7 +218,6 @@ func (a *App) ApplyUpdate() error {
 	a.downloadMu.Lock()
 	phase := a.downloadPhase
 	src := a.downloadedPath
-	targetVer := a.downloadedVersion
 	a.downloadMu.Unlock()
 
 	if phase != "done" || src == "" {
@@ -230,17 +229,11 @@ func (a *App) ApplyUpdate() error {
 		return fmt.Errorf("resolve current executable: %w", err)
 	}
 
-	// Resolve the renamed executable destination (e.g., internal-api-client-v1.3.15.exe)
+	// Resolve the executable destination (Internal Tool API.exe)
 	dir := filepath.Dir(exePath)
 	ext := filepath.Ext(exePath)
-	cleanVer := strings.TrimPrefix(targetVer, "v")
-	var newTargetPath string
-	if cleanVer != "" {
-		newTargetName := fmt.Sprintf("Internal Tool API_v%s%s", cleanVer, ext)
-		newTargetPath = filepath.Join(dir, newTargetName)
-	} else {
-		newTargetPath = exePath
-	}
+	newTargetName := fmt.Sprintf("Internal Tool API%s", ext)
+	newTargetPath := filepath.Join(dir, newTargetName)
 
 	binary := getUpdaterBinary()
 	// In dev builds the stub is just a text placeholder (<100 bytes).
