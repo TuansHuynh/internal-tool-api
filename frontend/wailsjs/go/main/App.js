@@ -18,6 +18,10 @@ export function CheckForUpdate() {
   return window['go']['main']['App']['CheckForUpdate']();
 }
 
+export function ClearMockServerLogs() {
+  return window['go']['main']['App']['ClearMockServerLogs']();
+}
+
 export function CreateFolderInDB(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['CreateFolderInDB'](arg1, arg2, arg3, arg4);
 }
@@ -78,6 +82,10 @@ export function GetEnvironmentsFromDB() {
   return window['go']['main']['App']['GetEnvironmentsFromDB']();
 }
 
+export function GetMockServerStatus() {
+  return window['go']['main']['App']['GetMockServerStatus']();
+}
+
 export function GetScenariosFromDB() {
   return window['go']['main']['App']['GetScenariosFromDB']();
 }
@@ -102,8 +110,20 @@ export function StartDownloadUpdate(arg1, arg2, arg3) {
   return window['go']['main']['App']['StartDownloadUpdate'](arg1, arg2, arg3);
 }
 
+export function StartMockServer(arg1, arg2) {
+  return window['go']['main']['App']['StartMockServer'](arg1, arg2);
+}
+
+export function StopMockServer() {
+  return window['go']['main']['App']['StopMockServer']();
+}
+
 export function UpdateFolderInDB(arg1, arg2) {
   return window['go']['main']['App']['UpdateFolderInDB'](arg1, arg2);
+}
+
+export function UpdateMockRoutes(arg1) {
+  return window['go']['main']['App']['UpdateMockRoutes'](arg1);
 }
 
 export function UpdateProjectInDB(arg1, arg2) {

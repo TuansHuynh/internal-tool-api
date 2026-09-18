@@ -5,6 +5,7 @@ import ResponsePanel from '../../components/ResponsePanel/ResponsePanel';
 import StressTestModal from '../../components/StressTestModal/StressTestModal';
 import EnvironmentModal from '../../components/EnvironmentModal/EnvironmentModal';
 import AutomationModal from '../../components/AutomationModal/AutomationModal';
+import MockServerModal from '../../components/MockServerModal/MockServerModal';
 
 interface WorkspaceProps {
   isEnvModalOpen?: boolean;
@@ -25,6 +26,7 @@ export default function Workspace({
 
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [isStressModalOpen, setIsStressModalOpen] = useState(false);
+  const [isMockModalOpen, setIsMockModalOpen] = useState(false);
   const [localEnvOpen, setLocalEnvOpen] = useState(false);
   const [localAutoOpen, setLocalAutoOpen] = useState(false);
 
@@ -240,6 +242,7 @@ export default function Workspace({
               onOpenStressModal={() => setIsStressModalOpen(true)}
               onOpenEnvModal={() => setEnvOpen(true)}
               onOpenAutomationModal={() => setAutoOpen(true)}
+              onOpenMockModal={() => setIsMockModalOpen(true)}
             />
           </div>
 
@@ -338,6 +341,12 @@ export default function Workspace({
       <AutomationModal
         isOpen={isAutoOpen}
         onClose={() => setAutoOpen(false)}
+      />
+
+      <MockServerModal
+        isOpen={isMockModalOpen}
+        onClose={() => setIsMockModalOpen(false)}
+        onOpenInNewTab={(url, method) => createNewTab(url, method)}
       />
     </div>
   );

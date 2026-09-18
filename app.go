@@ -78,6 +78,8 @@ type App struct {
 
 	streamMu      sync.Mutex
 	streamCancels map[string]context.CancelFunc
+
+	mockServer *core.MockServerEngine
 }
 
 func NewApp() *App {
@@ -90,6 +92,7 @@ func NewApp() *App {
 		dbManager:     dbm,
 		downloadPhase: "idle",
 		streamCancels: make(map[string]context.CancelFunc),
+		mockServer:    core.NewMockServerEngine(),
 	}
 }
 
@@ -308,6 +311,41 @@ func (a *App) CancelStreamRequest(reqID string) {
 	if cancel, exists := a.streamCancels[reqID]; exists {
 		cancel()
 		delete(a.streamCancels, reqID)
+	}
+}
+
+// ─── Mock Server Engine ───────────────────────────────────────────────────────
+
+func (a *App) StartMockServer(port int, routes []core.MockRoute) error {
+	if a.mockServer == nil {
+		a.mockServer = core.NewMockServerEngine()
+	}
+	return a.mockServer.Start(port, routes)
+}
+
+func (a *App) StopMockServer() error {
+	if a.mockServer == nil {
+		return nil
+	}
+	return a.mockServer.Stop()
+}
+
+func (a *App) GetMockServerStatus() core.MockServerStatus {
+	if a.mockServer == nil {
+		return core.MockServerStatus{}
+	}
+	return a.mockServer.GetStatus()
+}
+
+func (a *App) UpdateMockRoutes(routes []core.MockRoute) {
+	if a.mockServer != nil {
+		a.mockServer.UpdateRoutes(routes)
+	}
+}
+
+func (a *App) ClearMockServerLogs() {
+	if a.mockServer != nil {
+		a.mockServer.ClearLogs()
 	}
 }
 

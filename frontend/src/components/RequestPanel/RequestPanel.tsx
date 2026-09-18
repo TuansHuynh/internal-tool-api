@@ -8,9 +8,10 @@ interface RequestPanelProps {
   onOpenStressModal?: () => void;
   onOpenEnvModal?: () => void;
   onOpenAutomationModal?: () => void;
+  onOpenMockModal?: () => void;
 }
 
-export default function RequestPanel({ onOpenStressModal, onOpenEnvModal, onOpenAutomationModal }: RequestPanelProps) {
+export default function RequestPanel({ onOpenStressModal, onOpenEnvModal, onOpenAutomationModal, onOpenMockModal }: RequestPanelProps) {
   const { 
     activeTab, updateActiveTab, loading, handleSendRequest,
     environments, activeEnvId, setActiveEnvId,
@@ -599,6 +600,30 @@ export default function RequestPanel({ onOpenStressModal, onOpenEnvModal, onOpen
             }}
           >
             <span>🤖</span> Auto Test
+          </button>
+        )}
+
+        {/* Mock Server Button */}
+        {onOpenMockModal && (
+          <button
+            type="button"
+            onClick={onOpenMockModal}
+            title="Mở Local Mock Server để giả lập API endpoints"
+            style={{
+              padding: '0 12px',
+              background: 'rgba(168, 85, 247, 0.12)',
+              border: '1px solid rgba(168, 85, 247, 0.3)',
+              color: '#c084fc',
+              borderRadius: '6px',
+              fontWeight: 600,
+              fontSize: '12px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              cursor: 'pointer'
+            }}
+          >
+            <span>🎭</span> Mock API
           </button>
         )}
 

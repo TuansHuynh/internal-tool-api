@@ -12,6 +12,8 @@ export function CancelStreamRequest(arg1:string):Promise<void>;
 
 export function CheckForUpdate():Promise<updater.UpdateInfo>;
 
+export function ClearMockServerLogs():Promise<void>;
+
 export function CreateFolderInDB(arg1:string,arg2:string,arg3:string,arg4:string):Promise<void>;
 
 export function CreateProjectInDB(arg1:string,arg2:string):Promise<void>;
@@ -42,6 +44,8 @@ export function GetAppInfo():Promise<main.AppInfo>;
 
 export function GetEnvironmentsFromDB():Promise<Array<main.DBEnvironment>>;
 
+export function GetMockServerStatus():Promise<core.MockServerStatus>;
+
 export function GetScenariosFromDB():Promise<Array<main.DBScenario>>;
 
 export function GetUpdateStatus():Promise<main.UpdateStatus>;
@@ -54,7 +58,13 @@ export function SaveScenarioToDB(arg1:main.DBScenario):Promise<void>;
 
 export function StartDownloadUpdate(arg1:string,arg2:string,arg3:string):Promise<void>;
 
+export function StartMockServer(arg1:number,arg2:Array<core.MockRoute>):Promise<void>;
+
+export function StopMockServer():Promise<void>;
+
 export function UpdateFolderInDB(arg1:string,arg2:string):Promise<void>;
+
+export function UpdateMockRoutes(arg1:Array<core.MockRoute>):Promise<void>;
 
 export function UpdateProjectInDB(arg1:string,arg2:string):Promise<void>;
 
