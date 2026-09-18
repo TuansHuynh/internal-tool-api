@@ -75,6 +75,9 @@ type App struct {
 	downloadedPath    string // path of the fully downloaded & verified binary
 	downloadedVersion string // version string of the downloaded binary
 	downloadPhase     string // "idle" | "downloading" | "done" | "error"
+
+	streamMu      sync.Mutex
+	streamCancels map[string]context.CancelFunc
 }
 
 func NewApp() *App {
@@ -86,6 +89,7 @@ func NewApp() *App {
 		engine:        core.NewHttpClientEngine(true, 30),
 		dbManager:     dbm,
 		downloadPhase: "idle",
+		streamCancels: make(map[string]context.CancelFunc),
 	}
 }
 
@@ -261,11 +265,50 @@ func (a *App) ExecuteRequest(payload core.RequestPayload) (core.ResponsePayload,
 }
 
 func (a *App) ExecuteLoadTest(payload core.RequestPayload, concurrency int, total int, durationSec int, rampUpSec int, targetRPS int) core.StressTestResult {
-	return a.engine.ExecuteStressTest(payload, concurrency, total, durationSec, rampUpSec, targetRPS)
+	return a.engine.ExecuteStressTestWithProgress(payload, concurrency, total, durationSec, rampUpSec, targetRPS, func(tick core.StressTestTick) {
+		if a.ctx != nil {
+			wailsRuntime.EventsEmit(a.ctx, "stresstest:tick", tick)
+		}
+	})
 }
 
 func (a *App) CancelLoadTest() {
 	a.engine.CancelStressTest()
+}
+
+func (a *App) ExecuteStreamRequest(reqID string, payload core.RequestPayload) error {
+	ctx, cancel := context.WithCancel(context.Background())
+	a.streamMu.Lock()
+	if a.streamCancels == nil {
+		a.streamCancels = make(map[string]context.CancelFunc)
+	}
+	a.streamCancels[reqID] = cancel
+	a.streamMu.Unlock()
+
+	go func() {
+		defer func() {
+			a.streamMu.Lock()
+			delete(a.streamCancels, reqID)
+			a.streamMu.Unlock()
+		}()
+
+		_ = a.engine.ExecuteStream(ctx, payload, reqID, func(chunk core.StreamChunk) {
+			if a.ctx != nil {
+				wailsRuntime.EventsEmit(a.ctx, "stream:chunk:"+reqID, chunk)
+			}
+		})
+	}()
+
+	return nil
+}
+
+func (a *App) CancelStreamRequest(reqID string) {
+	a.streamMu.Lock()
+	defer a.streamMu.Unlock()
+	if cancel, exists := a.streamCancels[reqID]; exists {
+		cancel()
+		delete(a.streamCancels, reqID)
+	}
 }
 
 // ─── Database – Projects ──────────────────────────────────────────────────────

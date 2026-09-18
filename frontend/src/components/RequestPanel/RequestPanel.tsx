@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useApp, HeaderPair, ParamPair, KeyValueRow } from '../../context/AppContext';
 import { Editor } from '@monaco-editor/react';
 import { parseCurl, generateCodeSnippet, generateCurlSnippet } from '../../utils/curlParser';
+import { AssertionRule } from '../../utils/excelScenarioHelper';
 
 interface RequestPanelProps {
   onOpenStressModal?: () => void;
@@ -21,10 +22,11 @@ export default function RequestPanel({ onOpenStressModal, onOpenEnvModal, onOpen
   const { 
     method, reqBody, bodyType = 'json', urlEncodedList = [], 
     headersList = [], paramsList = [],
-    authType = 'none', authToken = '', authConfig = {} 
+    authType = 'none', authToken = '', authConfig = {},
+    assertions = [], isStreaming = false
   } = activeTab;
 
-  const [activeSubTab, setActiveSubTab] = useState<'params' | 'headers' | 'body' | 'auth'>('headers');
+  const [activeSubTab, setActiveSubTab] = useState<'params' | 'headers' | 'body' | 'auth' | 'assertions'>('headers');
   const [showRawToken, setShowRawToken] = useState(false);
   const [copiedHeader, setCopiedHeader] = useState(false);
 
@@ -158,6 +160,36 @@ export default function RequestPanel({ onOpenStressModal, onOpenEnvModal, onOpen
     } catch {
       alert("Nội dung Body không phải định dạng JSON hợp lệ để format!");
     }
+  };
+
+  // ==========================================
+  // ASSERTIONS MANAGEMENT
+  // ==========================================
+  const addAssertionRule = (
+    type: 'status' | 'time' | 'header' | 'body_json' | 'body_text' = 'status',
+    target = '',
+    operator: 'eq' | 'neq' | 'contains' | 'gt' | 'lt' | 'exists' | 'not_exists' = 'eq',
+    expected = '200'
+  ) => {
+    const newRule: AssertionRule = {
+      id: Date.now().toString() + Math.random().toString().slice(2, 6),
+      type,
+      target,
+      operator,
+      expected,
+      enabled: true
+    };
+    updateActiveTab({ assertions: [...assertions, newRule] });
+  };
+
+  const updateAssertionRule = (id: string, field: keyof AssertionRule, val: any) => {
+    const updated = assertions.map(r => (r.id === id || (!r.id && id === '')) ? { ...r, [field]: val } : r);
+    updateActiveTab({ assertions: updated });
+  };
+
+  const removeAssertionRule = (id: string) => {
+    const filtered = assertions.filter(r => r.id !== id);
+    updateActiveTab({ assertions: filtered });
   };
 
   // ==========================================
@@ -524,6 +556,28 @@ export default function RequestPanel({ onOpenStressModal, onOpenEnvModal, onOpen
           )}
         </button>
 
+        {/* Stream SSE Toggle */}
+        <button
+          type="button"
+          onClick={() => updateActiveTab({ isStreaming: !isStreaming })}
+          title="Bật/Tắt chế độ SSE Streaming (Event-Stream / LLM Tokens)"
+          style={{
+            padding: '0 10px',
+            background: isStreaming ? 'rgba(168, 85, 247, 0.2)' : 'var(--bg-app)',
+            border: isStreaming ? '1px solid #a855f7' : '1px solid var(--border-card)',
+            color: isStreaming ? '#c084fc' : 'var(--text-muted)',
+            borderRadius: '6px',
+            fontWeight: 600,
+            fontSize: '11px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '4px',
+            cursor: 'pointer'
+          }}
+        >
+          <span>📡</span> Stream {isStreaming ? 'ON' : 'OFF'}
+        </button>
+
         {/* Automation Test Button */}
         {onOpenAutomationModal && (
           <button
@@ -573,7 +627,7 @@ export default function RequestPanel({ onOpenStressModal, onOpenEnvModal, onOpen
         )}
       </div>
 
-      {/* Sub-tabs bar (Params, Headers, Body, Auth) */}
+      {/* Sub-tabs bar (Params, Headers, Body, Auth, Assertions) */}
       <div style={{
         display: 'flex',
         borderBottom: '1px solid var(--border-subtle)',
@@ -676,6 +730,37 @@ export default function RequestPanel({ onOpenStressModal, onOpenEnvModal, onOpen
               fontWeight: 600 
             }}>
               {authType}
+            </span>
+          )}
+        </button>
+
+        {/* ASSERTIONS SUBTAB BUTTON */}
+        <button 
+          type="button"
+          onClick={() => setActiveSubTab('assertions')}
+          style={{ 
+            padding: '6px 14px', 
+            background: 'transparent', 
+            color: activeSubTab === 'assertions' ? 'var(--color-primary)' : 'var(--text-muted)', 
+            borderBottom: activeSubTab === 'assertions' ? '2px solid var(--color-primary)' : '2px solid transparent', 
+            fontSize: '13px', 
+            fontWeight: activeSubTab === 'assertions' ? 600 : 400,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px'
+          }}
+        >
+          <span>Assertions</span>
+          {assertions.length > 0 && (
+            <span style={{ 
+              fontSize: '10px', 
+              background: 'rgba(56, 189, 248, 0.2)', 
+              color: '#38bdf8', 
+              padding: '1px 6px', 
+              borderRadius: '8px', 
+              fontWeight: 600 
+            }}>
+              {assertions.filter(a => a.enabled).length}
             </span>
           )}
         </button>
@@ -1291,6 +1376,168 @@ export default function RequestPanel({ onOpenStressModal, onOpenEnvModal, onOpen
                     </select>
                   </div>
                 </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ========================================== */}
+        {/* SUBTAB ASSERTIONS (Test Validations)       */}
+        {/* ========================================== */}
+        {activeSubTab === 'assertions' && (
+          <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 600 }}>Thêm mẫu nhanh:</span>
+                <button
+                  type="button"
+                  onClick={() => addAssertionRule('status', '', 'eq', '200')}
+                  style={{ padding: '2px 8px', borderRadius: '4px', background: 'rgba(16, 185, 129, 0.15)', border: '1px solid rgba(16, 185, 129, 0.3)', color: '#10b981', fontSize: '11px', fontWeight: 600, cursor: 'pointer' }}
+                >
+                  + Status is 200
+                </button>
+                <button
+                  type="button"
+                  onClick={() => addAssertionRule('time', '', 'lt', '500')}
+                  style={{ padding: '2px 8px', borderRadius: '4px', background: 'rgba(56, 189, 248, 0.15)', border: '1px solid rgba(56, 189, 248, 0.3)', color: '#38bdf8', fontSize: '11px', fontWeight: 600, cursor: 'pointer' }}
+                >
+                  + Response Time &lt; 500ms
+                </button>
+                <button
+                  type="button"
+                  onClick={() => addAssertionRule('header', 'Content-Type', 'contains', 'application/json')}
+                  style={{ padding: '2px 8px', borderRadius: '4px', background: 'rgba(245, 158, 11, 0.15)', border: '1px solid rgba(245, 158, 11, 0.3)', color: '#f59e0b', fontSize: '11px', fontWeight: 600, cursor: 'pointer' }}
+                >
+                  + Content-Type is JSON
+                </button>
+                <button
+                  type="button"
+                  onClick={() => addAssertionRule('body_json', '$.id', 'exists', '')}
+                  style={{ padding: '2px 8px', borderRadius: '4px', background: 'rgba(168, 85, 247, 0.15)', border: '1px solid rgba(168, 85, 247, 0.3)', color: '#c084fc', fontSize: '11px', fontWeight: 600, cursor: 'pointer' }}
+                >
+                  + JSON $.id exists
+                </button>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => addAssertionRule('status', '', 'eq', '200')}
+                style={{
+                  padding: '4px 10px',
+                  background: 'var(--bg-app)',
+                  border: '1px solid var(--border-card)',
+                  color: 'var(--color-primary)',
+                  borderRadius: '4px',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  cursor: 'pointer'
+                }}
+              >
+                + Thêm Assertion
+              </button>
+            </div>
+
+            {assertions.length === 0 ? (
+              <div style={{
+                padding: '24px',
+                textAlign: 'center',
+                background: 'var(--bg-app)',
+                borderRadius: '6px',
+                border: '1px dashed var(--border-card)',
+                color: 'var(--text-dim)',
+                fontSize: '12px'
+              }}>
+                <span style={{ fontSize: '20px', display: 'block', marginBottom: '4px' }}>🎯</span>
+                Chưa có luật kiểm tra Assertion nào. Bấm vào các nút mẫu ở trên để tự động kiểm tra Status Code, Độ trễ hoặc JSON Response!
+              </div>
+            ) : (
+              <div style={{ border: '1px solid var(--border-card)', borderRadius: '6px', background: 'var(--bg-app)', overflow: 'hidden' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                  <thead>
+                    <tr style={{ background: 'var(--bg-card)', borderBottom: '1px solid var(--border-card)', color: 'var(--text-muted)', textAlign: 'left' }}>
+                      <th style={{ width: '38px', padding: '6px', textAlign: 'center' }}>Bật</th>
+                      <th style={{ width: '130px', padding: '6px 8px' }}>Loại kiểm tra</th>
+                      <th style={{ width: '160px', padding: '6px 8px' }}>Target (Header/JSONPath)</th>
+                      <th style={{ width: '130px', padding: '6px 8px' }}>Toán tử</th>
+                      <th style={{ padding: '6px 8px' }}>Giá trị mong đợi</th>
+                      <th style={{ width: '40px', padding: '6px', textAlign: 'center' }}>Xóa</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {assertions.map((rule, idx) => {
+                      const ruleId = rule.id || `rule_${idx}`;
+                      return (
+                        <tr key={ruleId} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+                          <td style={{ padding: '6px', textAlign: 'center' }}>
+                            <input
+                              type="checkbox"
+                              checked={rule.enabled !== false}
+                              onChange={e => updateAssertionRule(ruleId, 'enabled', e.target.checked)}
+                              style={{ cursor: 'pointer' }}
+                            />
+                          </td>
+                          <td style={{ padding: '4px 6px' }}>
+                            <select
+                              value={rule.type}
+                              onChange={e => updateAssertionRule(ruleId, 'type', e.target.value as any)}
+                              style={{ width: '100%', padding: '4px', fontSize: '11px', background: 'var(--bg-card)', color: '#38bdf8' }}
+                            >
+                              <option value="status">Status Code</option>
+                              <option value="time">Response Time (ms)</option>
+                              <option value="header">Header Field</option>
+                              <option value="body_json">JSON Path ($.field)</option>
+                              <option value="body_text">Body Text Contains</option>
+                            </select>
+                          </td>
+                          <td style={{ padding: '4px 6px' }}>
+                            <input
+                              type="text"
+                              placeholder={rule.type === 'header' ? 'e.g. Content-Type' : (rule.type === 'body_json' ? 'e.g. $.data.id' : 'Không cần target')}
+                              disabled={rule.type === 'status' || rule.type === 'time' || (rule.type as any) === 'body_text'}
+                              value={rule.target || ''}
+                              onChange={e => updateAssertionRule(ruleId, 'target', e.target.value)}
+                              style={{ width: '100%', padding: '4px 6px', fontSize: '11px', background: 'transparent', border: 'none', color: '#e2e8f0', fontFamily: 'var(--font-mono)' }}
+                            />
+                          </td>
+                          <td style={{ padding: '4px 6px' }}>
+                            <select
+                              value={rule.operator}
+                              onChange={e => updateAssertionRule(ruleId, 'operator', e.target.value as any)}
+                              style={{ width: '100%', padding: '4px', fontSize: '11px', background: 'var(--bg-card)', color: '#facc15' }}
+                            >
+                              <option value="eq">Equals (==)</option>
+                              <option value="neq">Not Equals (!=)</option>
+                              <option value="contains">Contains (Chứa)</option>
+                              <option value="gt">Greater Than (&gt;)</option>
+                              <option value="lt">Less Than (&lt;)</option>
+                              <option value="exists">Exists (Tồn tại)</option>
+                              <option value="not_exists">Not Exists (Không có)</option>
+                            </select>
+                          </td>
+                          <td style={{ padding: '4px 6px' }}>
+                            <input
+                              type="text"
+                              placeholder="Mong đợi: 200, json, {{var}}"
+                              value={rule.expected}
+                              disabled={rule.operator === 'exists' || rule.operator === 'not_exists'}
+                              onChange={e => updateAssertionRule(ruleId, 'expected', e.target.value)}
+                              style={{ width: '100%', padding: '4px 6px', fontSize: '11px', background: 'transparent', border: 'none', color: '#10b981', fontFamily: 'var(--font-mono)' }}
+                            />
+                          </td>
+                          <td style={{ padding: '6px', textAlign: 'center' }}>
+                            <button
+                              type="button"
+                              onClick={() => removeAssertionRule(ruleId)}
+                              style={{ background: 'transparent', border: 'none', color: '#ef4444', fontSize: '14px', cursor: 'pointer' }}
+                            >
+                              ✕
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
             )}
           </div>

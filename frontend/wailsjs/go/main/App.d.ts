@@ -8,6 +8,8 @@ export function ApplyUpdate():Promise<void>;
 
 export function CancelLoadTest():Promise<void>;
 
+export function CancelStreamRequest(arg1:string):Promise<void>;
+
 export function CheckForUpdate():Promise<updater.UpdateInfo>;
 
 export function CreateFolderInDB(arg1:string,arg2:string,arg3:string,arg4:string):Promise<void>;
@@ -29,6 +31,8 @@ export function DeleteScenarioFromDB(arg1:string):Promise<void>;
 export function ExecuteLoadTest(arg1:core.RequestPayload,arg2:number,arg3:number,arg4:number,arg5:number,arg6:number):Promise<core.StressTestResult>;
 
 export function ExecuteRequest(arg1:core.RequestPayload):Promise<core.ResponsePayload>;
+
+export function ExecuteStreamRequest(arg1:string,arg2:core.RequestPayload):Promise<void>;
 
 export function ExportFullWorkspace():Promise<string>;
 

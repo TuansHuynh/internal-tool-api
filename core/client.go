@@ -1,11 +1,13 @@
 package core
 
 import (
+	"bufio"
 	"context"
 	"crypto/tls"
 	"io"
 	"net/http"
 	"net/http/httptrace"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -43,13 +45,41 @@ type ResponsePayload struct {
 	Timing       TimingDetails     `json:"timing"`
 }
 
+type StreamChunk struct {
+	ReqID     string            `json:"reqId"`
+	Index     int               `json:"index"`
+	Status    int               `json:"status,omitempty"`
+	Headers   map[string]string `json:"headers,omitempty"`
+	Data      string            `json:"data"`
+	EventType string            `json:"eventType,omitempty"`
+	IsEnd     bool              `json:"isEnd"`
+	Error     string            `json:"error,omitempty"`
+}
+
+type StressTestTick struct {
+	ElapsedSec   float64 `json:"elapsedSec"`
+	CurrentReqs  int64   `json:"currentReqs"`
+	SuccessCount int64   `json:"successCount"`
+	FailureCount int64   `json:"failureCount"`
+	CurrentRPS   float64 `json:"currentRps"`
+	AvgLatencyMs int64   `json:"avgLatencyMs"`
+	P95Ms        int64   `json:"p95Ms"`
+}
+
 type StressTestResult struct {
-	TotalRequests int64   `json:"totalRequests"`
-	SuccessCount  int64   `json:"successCount"`
-	FailureCount  int64   `json:"failureCount"`
-	AverageTimeMs int64   `json:"averageTimeMs"`
-	RPS           float64 `json:"rps"`
-	Cancelled     bool    `json:"cancelled"`
+	TotalRequests    int64   `json:"totalRequests"`
+	SuccessCount     int64   `json:"successCount"`
+	FailureCount     int64   `json:"failureCount"`
+	AverageTimeMs    int64   `json:"averageTimeMs"`
+	MinTimeMs        int64   `json:"minTimeMs"`
+	MaxTimeMs        int64   `json:"maxTimeMs"`
+	P50Ms            int64   `json:"p50Ms"`
+	P90Ms            int64   `json:"p90Ms"`
+	P95Ms            int64   `json:"p95Ms"`
+	P99Ms            int64   `json:"p99Ms"`
+	RPS              float64 `json:"rps"`
+	TotalDurationSec float64 `json:"totalDurationSec"`
+	Cancelled        bool    `json:"cancelled"`
 }
 
 // ==========================================
@@ -201,7 +231,42 @@ func (e *HttpClientEngine) CancelStressTest() {
 	}
 }
 
-func (e *HttpClientEngine) ExecuteStressTest(payload RequestPayload, concurrency int, totalRequests int, durationSec int, rampUpSec int, targetRPS int) StressTestResult {
+func calculatePercentiles(latencies []int64) (min, max, p50, p90, p95, p99 int64) {
+	if len(latencies) == 0 {
+		return 0, 0, 0, 0, 0, 0
+	}
+	sorted := make([]int64, len(latencies))
+	copy(sorted, latencies)
+	sort.Slice(sorted, func(i, j int) bool { return sorted[i] < sorted[j] })
+
+	n := len(sorted)
+	min = sorted[0]
+	max = sorted[n-1]
+
+	getP := func(percent float64) int64 {
+		idx := int(float64(n-1) * percent)
+		if idx >= n {
+			idx = n - 1
+		}
+		return sorted[idx]
+	}
+
+	p50 = getP(0.50)
+	p90 = getP(0.90)
+	p95 = getP(0.95)
+	p99 = getP(0.99)
+	return
+}
+
+func (e *HttpClientEngine) ExecuteStressTestWithProgress(
+	payload RequestPayload,
+	concurrency int,
+	totalRequests int,
+	durationSec int,
+	rampUpSec int,
+	targetRPS int,
+	onTick func(StressTestTick),
+) StressTestResult {
 	e.stressMu.Lock()
 	ctx, cancel := context.WithCancel(context.Background())
 	if durationSec > 0 {
@@ -223,6 +288,9 @@ func (e *HttpClientEngine) ExecuteStressTest(payload RequestPayload, concurrency
 	var successCount, failureCount, totalDurationMs int64
 	var actualTotalRequests int64
 	var isCancelled atomic.Bool
+
+	var latenciesMu sync.Mutex
+	var latencies []int64
 
 	useDuration := durationSec > 0
 
@@ -248,6 +316,53 @@ func (e *HttpClientEngine) ExecuteStressTest(payload RequestPayload, concurrency
 	}
 
 	testStartTime := time.Now()
+
+	// Live progress ticker
+	tickerStop := make(chan struct{})
+	if onTick != nil {
+		go func() {
+			tickInterval := time.NewTicker(300 * time.Millisecond)
+			defer tickInterval.Stop()
+			for {
+				select {
+				case <-tickerStop:
+					return
+				case <-tickInterval.C:
+					elapsed := time.Since(testStartTime).Seconds()
+					curReqs := atomic.LoadInt64(&actualTotalRequests)
+					succ := atomic.LoadInt64(&successCount)
+					fail := atomic.LoadInt64(&failureCount)
+					totDur := atomic.LoadInt64(&totalDurationMs)
+
+					var curRPS float64
+					if elapsed > 0 {
+						curRPS = float64(curReqs) / elapsed
+					}
+					var avgLat int64
+					if succ > 0 {
+						avgLat = totDur / succ
+					}
+
+					var p95 int64
+					latenciesMu.Lock()
+					if len(latencies) > 0 {
+						_, _, _, _, p95, _ = calculatePercentiles(latencies)
+					}
+					latenciesMu.Unlock()
+
+					onTick(StressTestTick{
+						ElapsedSec:   elapsed,
+						CurrentReqs:  curReqs,
+						SuccessCount: succ,
+						FailureCount: fail,
+						CurrentRPS:   curRPS,
+						AvgLatencyMs: avgLat,
+						P95Ms:        p95,
+					})
+				}
+			}
+		}()
+	}
 
 	for w := 0; w < concurrency; w++ {
 		wg.Add(1)
@@ -282,6 +397,11 @@ func (e *HttpClientEngine) ExecuteStressTest(payload RequestPayload, concurrency
 						} else {
 							atomic.AddInt64(&successCount, 1)
 							atomic.AddInt64(&totalDurationMs, res.ResponseTime)
+							latenciesMu.Lock()
+							if len(latencies) < 50000 {
+								latencies = append(latencies, res.ResponseTime)
+							}
+							latenciesMu.Unlock()
 						}
 					}
 				}
@@ -307,6 +427,11 @@ func (e *HttpClientEngine) ExecuteStressTest(payload RequestPayload, concurrency
 						} else {
 							atomic.AddInt64(&successCount, 1)
 							atomic.AddInt64(&totalDurationMs, res.ResponseTime)
+							latenciesMu.Lock()
+							if len(latencies) < 50000 {
+								latencies = append(latencies, res.ResponseTime)
+							}
+							latenciesMu.Unlock()
 						}
 					}
 				}
@@ -315,6 +440,8 @@ func (e *HttpClientEngine) ExecuteStressTest(payload RequestPayload, concurrency
 	}
 
 	wg.Wait()
+	close(tickerStop)
+
 	elapsedSec := time.Since(testStartTime).Seconds()
 
 	var avgTime int64
@@ -327,12 +454,116 @@ func (e *HttpClientEngine) ExecuteStressTest(payload RequestPayload, concurrency
 		rps = float64(actualTotalRequests) / elapsedSec
 	}
 
+	minT, maxT, p50, p90, p95, p99 := calculatePercentiles(latencies)
+
 	return StressTestResult{
-		TotalRequests: actualTotalRequests,
-		SuccessCount:  successCount,
-		FailureCount:  failureCount,
-		AverageTimeMs: avgTime,
-		RPS:           rps,
-		Cancelled:     isCancelled.Load(),
+		TotalRequests:    actualTotalRequests,
+		SuccessCount:     successCount,
+		FailureCount:     failureCount,
+		AverageTimeMs:    avgTime,
+		MinTimeMs:        minT,
+		MaxTimeMs:        maxT,
+		P50Ms:            p50,
+		P90Ms:            p90,
+		P95Ms:            p95,
+		P99Ms:            p99,
+		RPS:              rps,
+		TotalDurationSec: elapsedSec,
+		Cancelled:        isCancelled.Load(),
+	}
+}
+
+func (e *HttpClientEngine) ExecuteStressTest(payload RequestPayload, concurrency int, totalRequests int, durationSec int, rampUpSec int, targetRPS int) StressTestResult {
+	return e.ExecuteStressTestWithProgress(payload, concurrency, totalRequests, durationSec, rampUpSec, targetRPS, nil)
+}
+
+// ==========================================
+// 4. STREAMING ENGINE (SSE / LLM Streams)
+// ==========================================
+
+func (e *HttpClientEngine) ExecuteStream(ctx context.Context, payload RequestPayload, reqID string, onChunk func(StreamChunk)) error {
+	var bodyReader io.Reader
+	if payload.Body != "" {
+		bodyReader = strings.NewReader(payload.Body)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, payload.Method, payload.URL, bodyReader)
+	if err != nil {
+		return err
+	}
+
+	for k, v := range payload.Headers {
+		req.Header.Set(k, v)
+	}
+	if req.Header.Get("User-Agent") == "" {
+		req.Header.Set("User-Agent", "InternalApiClient-Go/2.0")
+	}
+
+	resp, err := e.Client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	headers := make(map[string]string)
+	for k, v := range resp.Header {
+		if len(v) > 0 {
+			headers[k] = strings.Join(v, ", ")
+		}
+	}
+
+	// Send initial metadata chunk
+	onChunk(StreamChunk{
+		ReqID:   reqID,
+		Index:   0,
+		Status:  resp.StatusCode,
+		Headers: headers,
+		Data:    "",
+		IsEnd:   false,
+	})
+
+	reader := bufio.NewReader(resp.Body)
+	chunkIndex := 1
+	buf := make([]byte, 2048)
+
+	for {
+		select {
+		case <-ctx.Done():
+			onChunk(StreamChunk{
+				ReqID: reqID,
+				Index: chunkIndex,
+				IsEnd: true,
+				Error: "Stream stopped by client",
+			})
+			return ctx.Err()
+		default:
+			n, err := reader.Read(buf)
+			if n > 0 {
+				onChunk(StreamChunk{
+					ReqID: reqID,
+					Index: chunkIndex,
+					Data:  string(buf[:n]),
+					IsEnd: false,
+				})
+				chunkIndex++
+			}
+			if err != nil {
+				if err == io.EOF {
+					onChunk(StreamChunk{
+						ReqID: reqID,
+						Index: chunkIndex,
+						IsEnd: true,
+					})
+					return nil
+				}
+				onChunk(StreamChunk{
+					ReqID: reqID,
+					Index: chunkIndex,
+					IsEnd: true,
+					Error: err.Error(),
+				})
+				return err
+			}
+		}
 	}
 }

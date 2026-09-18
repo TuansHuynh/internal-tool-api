@@ -1,10 +1,12 @@
 import * as XLSX from 'xlsx';
 
 export interface AssertionRule {
-  type: 'status' | 'time' | 'body_json' | 'header';
+  id?: string;
+  type: 'status' | 'time' | 'body_json' | 'header' | 'body_text';
   target?: string;       // JSONPath e.g. "$.success" or "$.data.token" or header name
   operator: 'eq' | 'neq' | 'contains' | 'gt' | 'lt' | 'exists' | 'not_exists';
   expected: string;      // e.g. "200", "1000", "true", "admin"
+  enabled?: boolean;
 }
 
 export interface VariableExtraction {

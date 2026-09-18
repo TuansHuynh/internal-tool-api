@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { 
     ExecuteRequest, 
+    ExecuteStreamRequest,
+    CancelStreamRequest,
     ExecuteLoadTest,
     CancelLoadTest,
     GetAllProjectsData,
@@ -18,7 +20,10 @@ import {
     DeleteEnvironmentFromDB,
     ExportFullWorkspace
 } from '../../wailsjs/go/main/App';
+import { EventsOn } from '../../wailsjs/runtime/runtime';
 import { core, main } from '../../wailsjs/go/models';
+import { AssertionRule } from '../utils/excelScenarioHelper';
+import { evaluateAssertion, StepAssertionResult } from '../utils/scenarioRunnerEngine';
 
 export interface KeyValueRow {
     id: string;
@@ -44,6 +49,14 @@ export interface AuthConfig {
     apiKeyAddTo?: 'header' | 'query';
 }
 
+export interface StreamChunkItem {
+    index: number;
+    data: string;
+    timestamp: string;
+    isEnd?: boolean;
+    status?: number;
+}
+
 export interface ApiTab {
     id: string;
     projectId: string;
@@ -64,6 +77,11 @@ export interface ApiTab {
     authToken: string;
     authConfig: AuthConfig;
     response: core.ResponsePayload | null;
+    assertions: AssertionRule[];
+    assertionResults?: StepAssertionResult[];
+    isStreaming?: boolean;
+    streamingActive?: boolean;
+    streamChunks?: StreamChunkItem[];
 }
 
 export interface HistoryItem {
@@ -140,6 +158,7 @@ interface AppContextType {
     getMappedHeaders: (tab: ApiTab) => Record<string, string>;
     updateQueryParamsFromPath: (path: string) => void;
     updatePathFromQueryParams: (params: ParamPair[]) => void;
+    handleStopStream: () => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -446,7 +465,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             authType: (req.authType as any) || 'none',
             authToken: req.authToken || '',
             authConfig: parsedAuthConfig,
-            response: null
+            response: null,
+            assertions: [],
+            assertionResults: [],
+            isStreaming: false,
+            streamingActive: false,
+            streamChunks: []
         };
 
         setTabs(prev => [...prev, newTab]);
@@ -507,55 +531,49 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     const deleteFolder = async (id: string) => {
         await DeleteFolderInDB(id);
-        const folderIDs = [id];
-        for (let i = 0; i < folderIDs.length; i++) {
-            const currentID = folderIDs[i];
-            folders.filter(f => f.parentId === currentID).forEach(f => folderIDs.push(f.id));
-        }
-        const requestIDsToClose = dbRequests.filter(r => folderIDs.includes(r.folderId || '')).map(r => r.id);
-        setTabs(prev => prev.filter(t => !requestIDsToClose.includes(t.id)));
         await refreshWorkspaceData();
     };
 
     const createRequest = async (projectId: string, folderId: string, name: string, method: string) => {
         const id = 'req_' + Date.now();
         await CreateRequestInDB(id, projectId, folderId, name, method);
-        
-        setTabs(prev => {
-            const parsedHeaders = [{ id: '1', key: 'Content-Type', value: 'application/json', enabled: true }];
-            const newTab: ApiTab = {
-                id,
-                projectId,
-                folderId,
-                name,
-                method,
-                baseUrl: '',
-                port: '8080',
-                usePort: false,
-                apiPath: '',
-                paramsList: [],
-                reqBody: '',
-                bodyType: 'json',
-                urlEncodedList: [],
-                formDataList: [],
-                headersList: parsedHeaders,
-                authType: 'none',
-                authToken: '',
-                authConfig: {},
-                response: null
-            };
-            return [...prev, newTab];
-        });
-        setActiveTabId(id);
         await refreshWorkspaceData();
+        
+        const newTab: ApiTab = {
+            id,
+            projectId,
+            folderId,
+            name,
+            method,
+            baseUrl: 'https://jsonplaceholder.typicode.com',
+            port: '8080',
+            usePort: false,
+            apiPath: '/posts/1',
+            paramsList: [],
+            reqBody: '',
+            bodyType: 'json',
+            urlEncodedList: [],
+            formDataList: [],
+            headersList: [{ id: '1', key: 'Content-Type', value: 'application/json', enabled: true }],
+            authType: 'none',
+            authToken: '',
+            authConfig: {},
+            response: null,
+            assertions: [],
+            assertionResults: [],
+            isStreaming: false,
+            streamingActive: false,
+            streamChunks: []
+        };
+        setTabs(prev => [...prev, newTab]);
+        setActiveTabId(id);
     };
 
     const renameRequest = async (id: string, name: string) => {
-        const req = dbRequests.find(r => r.id === id);
-        if (req) {
-            const updated = { ...req, name };
-            await UpdateRequestInDB(updated);
-            setTabs(prev => prev.map(t => t.id === id ? { ...t, name } : t));
+        const targetReq = dbRequests.find(r => r.id === id);
+        if (targetReq) {
+            await UpdateRequestInDB({ ...targetReq, name });
+            updateActiveTab({ name });
             await refreshWorkspaceData();
         }
     };
@@ -567,77 +585,52 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     };
 
     const parseEnvVariables = (text: string): string => {
-        if (!text || activeEnvId === 'none') return text;
+        if (!text) return text;
         const currentEnv = environments.find(e => e.id === activeEnvId);
         if (!currentEnv) return text;
 
-        let parsedText = text;
-        currentEnv.variables.forEach(v => {
-            if (v.enabled && v.key.trim() !== "") {
-                const placeholder = `{{${v.key.trim()}}}`;
-                parsedText = parsedText.replaceAll(placeholder, v.value);
-            }
+        let result = text;
+        currentEnv.variables.filter(v => v.enabled && v.key.trim() !== '').forEach(v => {
+            const regex = new RegExp(`{{\\s*${v.key.trim()}\\s*}}`, 'g');
+            result = result.replace(regex, v.value);
         });
-        return parsedText;
+        return result;
     };
 
     const buildFullUrl = (tab: ApiTab): string => {
-        const parsedBase = parseEnvVariables(tab.baseUrl.trim());
-        const parsedPort = parseEnvVariables(tab.port.trim());
-        let parsedPath = parseEnvVariables(tab.apiPath.trim());
-
-        let cleanBase = parsedBase.replace(/\/+$/, '');
-        let cleanPath = parsedPath.startsWith('/') ? parsedPath : `/${parsedPath}`;
-        if (cleanPath === '/') cleanPath = '';
-
-        let fullUrl = cleanBase;
-        if (tab.usePort && parsedPort) {
-            fullUrl += `:${parsedPort}`;
+        let base = parseEnvVariables(tab.baseUrl?.trim() || '');
+        if (!base.startsWith('http://') && !base.startsWith('https://')) {
+            base = 'http://' + base;
         }
-        fullUrl += cleanPath;
-
-        // Append API Key to query if enabled
-        if (tab.authType === 'apikey' && tab.authConfig?.apiKeyAddTo === 'query' && tab.authConfig.apiKeyName && tab.authConfig.apiKeyValue) {
-            const separator = fullUrl.includes('?') ? '&' : '?';
-            const k = encodeURIComponent(parseEnvVariables(tab.authConfig.apiKeyName.trim()));
-            const v = encodeURIComponent(parseEnvVariables(tab.authConfig.apiKeyValue.trim()));
-            fullUrl += `${separator}${k}=${v}`;
+        
+        let portPart = '';
+        if (tab.usePort && tab.port) {
+            portPart = `:${parseEnvVariables(tab.port.trim())}`;
         }
 
-        return fullUrl;
+        let path = parseEnvVariables(tab.apiPath?.trim() || '');
+        if (path && !path.startsWith('/') && !path.startsWith('?')) {
+            path = '/' + path;
+        }
+
+        return `${base}${portPart}${path}`;
     };
 
     const getMappedHeaders = (tab: ApiTab): Record<string, string> => {
         const mappedHeaders: Record<string, string> = {};
-
-        // User Defined Headers
-        tab.headersList.forEach(item => {
-            if (item.enabled && item.key.trim() !== "") {
-                mappedHeaders[item.key.trim()] = parseEnvVariables(item.value);
-            }
+        
+        tab.headersList?.filter(h => h.enabled && h.key.trim() !== '').forEach(h => {
+            mappedHeaders[parseEnvVariables(h.key.trim())] = parseEnvVariables(h.value);
         });
 
-        // Bearer Token
-        if (tab.authType === 'bearer' && tab.authToken && tab.authToken.trim() !== "") {
-            const resolvedToken = parseEnvVariables(tab.authToken.trim());
-            if (resolvedToken) {
-                const headerVal = resolvedToken.toLowerCase().startsWith('bearer ')
-                    ? resolvedToken
-                    : `Bearer ${resolvedToken}`;
-                mappedHeaders['Authorization'] = headerVal;
-            }
-        }
-
-        // Basic Auth
-        if (tab.authType === 'basic' && tab.authConfig?.username) {
-            const u = parseEnvVariables(tab.authConfig.username.trim());
+        // Inject Auth
+        if (tab.authType === 'bearer' && tab.authToken) {
+            mappedHeaders['Authorization'] = `Bearer ${parseEnvVariables(tab.authToken.trim())}`;
+        } else if (tab.authType === 'basic' && (tab.authConfig?.username || tab.authConfig?.password)) {
+            const u = parseEnvVariables(tab.authConfig.username?.trim() || '');
             const p = parseEnvVariables(tab.authConfig.password?.trim() || '');
-            const encoded = btoa(`${u}:${p}`);
-            mappedHeaders['Authorization'] = `Basic ${encoded}`;
-        }
-
-        // API Key Header
-        if (tab.authType === 'apikey' && (!tab.authConfig?.apiKeyAddTo || tab.authConfig.apiKeyAddTo === 'header') && tab.authConfig?.apiKeyName) {
+            mappedHeaders['Authorization'] = `Basic ${btoa(`${u}:${p}`)}`;
+        } else if (tab.authType === 'apikey' && (!tab.authConfig?.apiKeyAddTo || tab.authConfig.apiKeyAddTo === 'header') && tab.authConfig?.apiKeyName) {
             const k = parseEnvVariables(tab.authConfig.apiKeyName.trim());
             const v = parseEnvVariables(tab.authConfig.apiKeyValue?.trim() || '');
             if (k) {
@@ -660,29 +653,126 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         return parseEnvVariables(tab.reqBody);
     };
 
+    const handleStopStream = async () => {
+        if (!activeTab) return;
+        try {
+            await CancelStreamRequest(activeTab.id);
+            updateActiveTab({ streamingActive: false });
+        } catch (e) {
+            console.error("Failed to cancel stream:", e);
+        }
+    };
+
     const handleSendRequest = useCallback(async () => {
         if (!activeTab || loading) return;
         setLoading(true);
-        updateActiveTab({ response: null });
-        try {
-            const finalUrl = buildFullUrl(activeTab);
-            const headers = getMappedHeaders(activeTab);
+        updateActiveTab({ response: null, streamChunks: [], streamingActive: activeTab.isStreaming });
 
-            // Auto set Content-Type if urlencoded
-            if (activeTab.bodyType === 'urlencoded' && !Object.keys(headers).some(k => k.toLowerCase() === 'content-type')) {
-                headers['Content-Type'] = 'application/x-www-form-urlencoded';
+        const finalUrl = buildFullUrl(activeTab);
+        const headers = getMappedHeaders(activeTab);
+
+        if (activeTab.bodyType === 'urlencoded' && !Object.keys(headers).some(k => k.toLowerCase() === 'content-type')) {
+            headers['Content-Type'] = 'application/x-www-form-urlencoded';
+        }
+
+        const payload: core.RequestPayload = {
+            method: activeTab.method,
+            url: finalUrl,
+            headers,
+            body: getProcessedBody(activeTab),
+            bodyType: activeTab.bodyType
+        };
+
+        // Streaming Request Branch
+        if (activeTab.isStreaming) {
+            try {
+                let accumulatedData = '';
+                const startTime = Date.now();
+
+                const cancelStreamEvent = EventsOn('stream:chunk:' + activeTab.id, (chunk: any) => {
+                    if (chunk.data) {
+                        accumulatedData += chunk.data;
+                    }
+                    const newChunk: StreamChunkItem = {
+                        index: chunk.index,
+                        data: chunk.data,
+                        timestamp: new Date().toLocaleTimeString(),
+                        isEnd: chunk.isEnd,
+                        status: chunk.status
+                    };
+                    
+                    setTabs(prev => prev.map(t => {
+                        if (t.id === activeTab.id) {
+                            const updatedChunks = [...(t.streamChunks || []), newChunk];
+                            const mockResponse: any = {
+                                status: chunk.status || t.response?.status || 200,
+                                statusText: 'Stream Receiving...',
+                                body: accumulatedData,
+                                headers: chunk.headers || t.response?.headers || {},
+                                responseTimeMs: Date.now() - startTime,
+                                responseSizeByte: accumulatedData.length,
+                                timing: {
+                                    dnsTimeMs: 0,
+                                    tcpTimeMs: 0,
+                                    tlsTimeMs: 0,
+                                    ttfbMs: Date.now() - startTime,
+                                    downloadTimeMs: 0,
+                                    totalTimeMs: Date.now() - startTime
+                                }
+                            };
+                            return {
+                                ...t,
+                                streamChunks: updatedChunks,
+                                response: mockResponse,
+                                streamingActive: !chunk.isEnd
+                            };
+                        }
+                        return t;
+                    }));
+
+                    if (chunk.isEnd) {
+                        setLoading(false);
+                        cancelStreamEvent();
+                    }
+                });
+
+                await ExecuteStreamRequest(activeTab.id, payload);
+            } catch (error) {
+                console.error("Streaming error:", error);
+                setLoading(false);
+                updateActiveTab({ streamingActive: false });
+            }
+            return;
+        }
+
+        // Standard Request Branch
+        try {
+            const result = await ExecuteRequest(payload);
+
+            // Evaluate Assertions
+            let assertionResults: StepAssertionResult[] = [];
+            if (activeTab.assertions && activeTab.assertions.length > 0) {
+                let parsedJson: any = undefined;
+                try {
+                    parsedJson = JSON.parse(result.body);
+                } catch {
+                    parsedJson = undefined;
+                }
+
+                const envContext: Record<string, any> = {};
+                const currentEnv = environments.find(e => e.id === activeEnvId);
+                if (currentEnv) {
+                    currentEnv.variables.forEach(v => {
+                        if (v.enabled) envContext[v.key] = v.value;
+                    });
+                }
+
+                assertionResults = activeTab.assertions
+                    .filter(rule => rule.enabled !== false)
+                    .map(rule => evaluateAssertion(rule, result, parsedJson, envContext));
             }
 
-            const payload: core.RequestPayload = {
-                method: activeTab.method,
-                url: finalUrl,
-                headers,
-                body: getProcessedBody(activeTab),
-                bodyType: activeTab.bodyType
-            };
-            
-            const result = await ExecuteRequest(payload);
-            updateActiveTab({ response: result });
+            updateActiveTab({ response: result, assertionResults });
 
             const newHistory: HistoryItem = {
                 id: Date.now().toString(),
@@ -771,7 +861,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             createRequest, renameRequest, deleteRequest,
             openSessionAsTab, refreshWorkspaceData, exportWorkspace,
             parseEnvVariables, buildFullUrl, getMappedHeaders,
-            updateQueryParamsFromPath, updatePathFromQueryParams
+            updateQueryParamsFromPath, updatePathFromQueryParams,
+            handleStopStream
         }}>
             {children}
         </AppContext.Provider>

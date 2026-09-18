@@ -10,6 +10,10 @@ export function CancelLoadTest() {
   return window['go']['main']['App']['CancelLoadTest']();
 }
 
+export function CancelStreamRequest(arg1) {
+  return window['go']['main']['App']['CancelStreamRequest'](arg1);
+}
+
 export function CheckForUpdate() {
   return window['go']['main']['App']['CheckForUpdate']();
 }
@@ -52,6 +56,10 @@ export function ExecuteLoadTest(arg1, arg2, arg3, arg4, arg5, arg6) {
 
 export function ExecuteRequest(arg1) {
   return window['go']['main']['App']['ExecuteRequest'](arg1);
+}
+
+export function ExecuteStreamRequest(arg1, arg2) {
+  return window['go']['main']['App']['ExecuteStreamRequest'](arg1, arg2);
 }
 
 export function ExportFullWorkspace() {

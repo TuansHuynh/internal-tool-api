@@ -89,7 +89,14 @@ export namespace core {
 	    successCount: number;
 	    failureCount: number;
 	    averageTimeMs: number;
+	    minTimeMs: number;
+	    maxTimeMs: number;
+	    p50Ms: number;
+	    p90Ms: number;
+	    p95Ms: number;
+	    p99Ms: number;
 	    rps: number;
+	    totalDurationSec: number;
 	    cancelled: boolean;
 	
 	    static createFrom(source: any = {}) {
@@ -102,7 +109,14 @@ export namespace core {
 	        this.successCount = source["successCount"];
 	        this.failureCount = source["failureCount"];
 	        this.averageTimeMs = source["averageTimeMs"];
+	        this.minTimeMs = source["minTimeMs"];
+	        this.maxTimeMs = source["maxTimeMs"];
+	        this.p50Ms = source["p50Ms"];
+	        this.p90Ms = source["p90Ms"];
+	        this.p95Ms = source["p95Ms"];
+	        this.p99Ms = source["p99Ms"];
 	        this.rps = source["rps"];
+	        this.totalDurationSec = source["totalDurationSec"];
 	        this.cancelled = source["cancelled"];
 	    }
 	}

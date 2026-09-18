@@ -3,15 +3,19 @@ import { useApp } from '../../context/AppContext';
 import { Editor } from '@monaco-editor/react';
 
 export default function ResponsePanel() {
-  const { activeTab, loading } = useApp();
+  const { activeTab, loading, handleStopStream } = useApp();
   const [formatMode, setFormatMode] = useState<'pretty' | 'raw' | 'preview'>('pretty');
-  const [activeTabSub, setActiveTabSub] = useState<'body' | 'headers' | 'timing'>('body');
+  const [activeTabSub, setActiveTabSub] = useState<'body' | 'headers' | 'timing' | 'assertions' | 'stream'>('body');
   const [copied, setCopied] = useState(false);
 
   if (!activeTab) return null;
-  const { response } = activeTab;
+  const { response, assertionResults = [], isStreaming = false, streamingActive = false, streamChunks = [] } = activeTab;
 
-  if (loading) {
+  const assertionPassedCount = assertionResults.filter(r => r.passed).length;
+  const hasAssertions = assertionResults.length > 0;
+  const allAssertionsPassed = hasAssertions && assertionPassedCount === assertionResults.length;
+
+  if (loading && !isStreaming) {
     return (
       <div style={{
         background: 'var(--bg-card)',
@@ -44,7 +48,7 @@ export default function ResponsePanel() {
     );
   }
 
-  if (!response) {
+  if (!response && !streamingActive && streamChunks.length === 0) {
     return (
       <div style={{
         background: 'var(--bg-card)',
@@ -71,12 +75,12 @@ export default function ResponsePanel() {
     );
   }
 
-  // Format response body
-  const isHtml = response.body.trim().startsWith('<');
-  let displayBody = response.body;
+  const resBody = response ? response.body : streamChunks.map(c => c.data).join('');
+  const isHtml = resBody.trim().startsWith('<');
+  let displayBody = resBody;
   if (formatMode === 'pretty') {
     try {
-      const parsed = JSON.parse(response.body);
+      const parsed = JSON.parse(resBody);
       displayBody = JSON.stringify(parsed, null, 2);
     } catch {
       // keep raw body
@@ -91,7 +95,7 @@ export default function ResponsePanel() {
     return { bg: 'rgba(239, 68, 68, 0.15)', text: '#ef4444', border: 'rgba(239, 68, 68, 0.3)' };
   };
 
-  const statusStyle = getStatusColor(response.status);
+  const statusStyle = getStatusColor(response ? response.status : 200);
 
   // Response size formatting
   const formatSize = (bytes: number) => {
@@ -116,14 +120,14 @@ export default function ResponsePanel() {
     document.body.removeChild(element);
   };
 
-  const responseHeadersList = Object.entries(response.headers || {});
-  const timing = (response as any).timing || {
+  const responseHeadersList = Object.entries(response?.headers || {});
+  const timing = (response as any)?.timing || {
     dnsTimeMs: 0,
     tcpTimeMs: 0,
     tlsTimeMs: 0,
-    ttfbMs: response.responseTimeMs,
+    ttfbMs: response?.responseTimeMs || 0,
     downloadTimeMs: 0,
-    totalTimeMs: response.responseTimeMs
+    totalTimeMs: response?.responseTimeMs || 0
   };
 
   return (
@@ -162,39 +166,77 @@ export default function ResponsePanel() {
             border: `1px solid ${statusStyle.border}`,
             fontFamily: 'var(--font-mono)'
           }}>
-            Status: {response.status} {response.statusText || (response.status === 200 ? 'OK' : '')}
+            Status: {response ? response.status : (streamingActive ? 'Streaming...' : '200')} {response?.statusText || ''}
           </span>
 
-          {/* Time pill (Click to view timing breakdown) */}
-          <button
-            onClick={() => setActiveTabSub('timing')}
-            title="Nhấn để xem chi tiết độ trễ DNS, TCP, TLS, TTFB"
-            style={{
+          {/* Streaming active indicator & cancel */}
+          {streamingActive && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span className="animate-pulse" style={{ fontSize: '11px', background: 'rgba(168, 85, 247, 0.2)', color: '#c084fc', padding: '3px 8px', borderRadius: '6px', border: '1px solid rgba(168, 85, 247, 0.4)', fontWeight: 600 }}>
+                ● SSE Luồng trực tiếp ({streamChunks.length} chunks)
+              </span>
+              <button
+                onClick={handleStopStream}
+                style={{ padding: '3px 8px', borderRadius: '4px', background: '#374151', color: '#f87171', border: '1px solid #ef4444', fontSize: '11px', fontWeight: 600, cursor: 'pointer' }}
+              >
+                🛑 Dừng Luồng
+              </button>
+            </div>
+          )}
+
+          {/* Time pill */}
+          {response && (
+            <button
+              onClick={() => setActiveTabSub('timing')}
+              title="Nhấn để xem chi tiết độ trễ DNS, TCP, TLS, TTFB"
+              style={{
+                fontSize: '12px',
+                padding: '3px 8px',
+                borderRadius: '6px',
+                background: activeTabSub === 'timing' ? 'rgba(56, 189, 248, 0.2)' : 'var(--bg-app)',
+                color: response.responseTimeMs < 300 ? '#10b981' : (response.responseTimeMs < 1000 ? '#f59e0b' : '#ef4444'),
+                border: '1px solid var(--border-card)',
+                fontFamily: 'var(--font-mono)',
+                cursor: 'pointer'
+              }}
+            >
+              ⏱️ {response.responseTimeMs} ms
+            </button>
+          )}
+
+          {/* Size pill */}
+          {response && (
+            <span style={{
               fontSize: '12px',
               padding: '3px 8px',
               borderRadius: '6px',
-              background: activeTabSub === 'timing' ? 'rgba(56, 189, 248, 0.2)' : 'var(--bg-app)',
-              color: response.responseTimeMs < 300 ? '#10b981' : (response.responseTimeMs < 1000 ? '#f59e0b' : '#ef4444'),
+              background: 'var(--bg-app)',
+              color: 'var(--text-muted)',
               border: '1px solid var(--border-card)',
-              fontFamily: 'var(--font-mono)',
-              cursor: 'pointer'
-            }}
-          >
-            ⏱ {response.responseTimeMs} ms ▾
-          </button>
+              fontFamily: 'var(--font-mono)'
+            }}>
+              📦 {formatSize(response.responseSizeByte)}
+            </span>
+          )}
 
-          {/* Size pill */}
-          <span style={{
-            fontSize: '12px',
-            padding: '3px 8px',
-            borderRadius: '6px',
-            background: 'var(--bg-app)',
-            color: '#38bdf8',
-            border: '1px solid var(--border-card)',
-            fontFamily: 'var(--font-mono)'
-          }}>
-            📦 {formatSize(response.responseSizeByte)}
-          </span>
+          {/* Assertions status summary badge */}
+          {hasAssertions && (
+            <button
+              onClick={() => setActiveTabSub('assertions')}
+              style={{
+                fontSize: '11px',
+                fontWeight: 700,
+                padding: '3px 8px',
+                borderRadius: '6px',
+                background: allAssertionsPassed ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)',
+                color: allAssertionsPassed ? '#10b981' : '#ef4444',
+                border: `1px solid ${allAssertionsPassed ? 'rgba(16, 185, 129, 0.4)' : 'rgba(239, 68, 68, 0.4)'}`,
+                cursor: 'pointer'
+              }}
+            >
+              {allAssertionsPassed ? '✓' : '✕'} Assertions: {assertionPassedCount}/{assertionResults.length} Passed
+            </button>
+          )}
         </div>
 
         {/* Right Tools & Mode switch */}
@@ -209,7 +251,8 @@ export default function ResponsePanel() {
                 borderRadius: '4px',
                 background: formatMode === 'pretty' && activeTabSub === 'body' ? 'var(--color-primary)' : 'transparent',
                 color: formatMode === 'pretty' && activeTabSub === 'body' ? '#0b0f17' : 'var(--text-muted)',
-                fontWeight: 600
+                fontWeight: 600,
+                cursor: 'pointer'
               }}
             >
               Pretty
@@ -222,7 +265,8 @@ export default function ResponsePanel() {
                 borderRadius: '4px',
                 background: formatMode === 'raw' && activeTabSub === 'body' ? 'var(--color-primary)' : 'transparent',
                 color: formatMode === 'raw' && activeTabSub === 'body' ? '#0b0f17' : 'var(--text-muted)',
-                fontWeight: 600
+                fontWeight: 600,
+                cursor: 'pointer'
               }}
             >
               Raw
@@ -235,7 +279,8 @@ export default function ResponsePanel() {
                 borderRadius: '4px',
                 background: formatMode === 'preview' && activeTabSub === 'body' ? 'var(--color-primary)' : 'transparent',
                 color: formatMode === 'preview' && activeTabSub === 'body' ? '#0b0f17' : 'var(--text-muted)',
-                fontWeight: 600
+                fontWeight: 600,
+                cursor: 'pointer'
               }}
             >
               Preview
@@ -252,7 +297,8 @@ export default function ResponsePanel() {
               border: '1px solid var(--border-card)',
               borderRadius: '6px',
               fontSize: '11px',
-              fontWeight: 600
+              fontWeight: 600,
+              cursor: 'pointer'
             }}
           >
             {copied ? '✓ Đã chép' : 'Sao chép'}
@@ -268,7 +314,8 @@ export default function ResponsePanel() {
               color: 'var(--text-muted)',
               border: '1px solid var(--border-card)',
               borderRadius: '6px',
-              fontSize: '11px'
+              fontSize: '11px',
+              cursor: 'pointer'
             }}
           >
             💾
@@ -276,7 +323,7 @@ export default function ResponsePanel() {
         </div>
       </div>
 
-      {/* Subtabs: Body vs Headers vs Timing */}
+      {/* Subtabs Bar: Body | Headers | Timing | Assertions | Stream */}
       <div style={{
         display: 'flex',
         borderBottom: '1px solid var(--border-card)',
@@ -293,7 +340,8 @@ export default function ResponsePanel() {
             color: activeTabSub === 'body' ? 'var(--color-primary)' : 'var(--text-muted)',
             borderBottom: activeTabSub === 'body' ? '2px solid var(--color-primary)' : '2px solid transparent',
             fontSize: '12px',
-            fontWeight: activeTabSub === 'body' ? 600 : 400
+            fontWeight: activeTabSub === 'body' ? 600 : 400,
+            cursor: 'pointer'
           }}
         >
           Response Body
@@ -306,7 +354,8 @@ export default function ResponsePanel() {
             color: activeTabSub === 'headers' ? 'var(--color-primary)' : 'var(--text-muted)',
             borderBottom: activeTabSub === 'headers' ? '2px solid var(--color-primary)' : '2px solid transparent',
             fontSize: '12px',
-            fontWeight: activeTabSub === 'headers' ? 600 : 400
+            fontWeight: activeTabSub === 'headers' ? 600 : 400,
+            cursor: 'pointer'
           }}
         >
           Response Headers ({responseHeadersList.length})
@@ -319,21 +368,80 @@ export default function ResponsePanel() {
             color: activeTabSub === 'timing' ? 'var(--color-primary)' : 'var(--text-muted)',
             borderBottom: activeTabSub === 'timing' ? '2px solid var(--color-primary)' : '2px solid transparent',
             fontSize: '12px',
-            fontWeight: activeTabSub === 'timing' ? 600 : 400
+            fontWeight: activeTabSub === 'timing' ? 600 : 400,
+            cursor: 'pointer'
           }}
         >
           Network Timing
         </button>
+
+        {hasAssertions && (
+          <button
+            onClick={() => setActiveTabSub('assertions')}
+            style={{
+              padding: '6px 12px',
+              background: 'transparent',
+              color: activeTabSub === 'assertions' ? '#38bdf8' : 'var(--text-muted)',
+              borderBottom: activeTabSub === 'assertions' ? '2px solid #38bdf8' : '2px solid transparent',
+              fontSize: '12px',
+              fontWeight: activeTabSub === 'assertions' ? 700 : 400,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              cursor: 'pointer'
+            }}
+          >
+            <span>Assertions Results</span>
+            <span style={{
+              fontSize: '10px',
+              padding: '1px 6px',
+              borderRadius: '8px',
+              background: allAssertionsPassed ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)',
+              color: allAssertionsPassed ? '#10b981' : '#ef4444'
+            }}>
+              {assertionPassedCount}/{assertionResults.length}
+            </span>
+          </button>
+        )}
+
+        {(isStreaming || streamChunks.length > 0) && (
+          <button
+            onClick={() => setActiveTabSub('stream')}
+            style={{
+              padding: '6px 12px',
+              background: 'transparent',
+              color: activeTabSub === 'stream' ? '#c084fc' : 'var(--text-muted)',
+              borderBottom: activeTabSub === 'stream' ? '2px solid #c084fc' : '2px solid transparent',
+              fontSize: '12px',
+              fontWeight: activeTabSub === 'stream' ? 700 : 400,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              cursor: 'pointer'
+            }}
+          >
+            <span>📡 Live Stream</span>
+            <span style={{
+              fontSize: '10px',
+              padding: '1px 6px',
+              borderRadius: '8px',
+              background: 'rgba(168, 85, 247, 0.2)',
+              color: '#c084fc'
+            }}>
+              {streamChunks.length}
+            </span>
+          </button>
+        )}
       </div>
 
-      {/* Body / Headers / Timing Display (Stretches to 100% height) */}
+      {/* Body / Headers / Timing / Assertions / Stream Display */}
       <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         {activeTabSub === 'body' && (
           formatMode === 'preview' ? (
             <div style={{ flex: 1, height: '100%', background: '#fff', borderRadius: '4px', overflow: 'hidden' }}>
               <iframe
                 title="Response HTML Preview"
-                srcDoc={response.body}
+                srcDoc={resBody}
                 sandbox="allow-same-origin"
                 style={{ width: '100%', height: '100%', border: 'none' }}
               />
@@ -439,6 +547,107 @@ export default function ResponsePanel() {
                   {timing.totalTimeMs} ms
                 </div>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Assertions Results Subtab */}
+        {activeTabSub === 'assertions' && (
+          <div style={{ flex: 1, padding: '16px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '13px', fontWeight: 700, color: '#38bdf8' }}>
+                🎯 Kết Quả Đánh Giá Assertions:
+              </span>
+              <span style={{
+                fontSize: '11px',
+                fontWeight: 700,
+                padding: '2px 10px',
+                borderRadius: '6px',
+                background: allAssertionsPassed ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)',
+                color: allAssertionsPassed ? '#10b981' : '#ef4444'
+              }}>
+                {assertionPassedCount} / {assertionResults.length} Đạt yêu cầu
+              </span>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {assertionResults.map((item, idx) => (
+                <div
+                  key={idx}
+                  style={{
+                    background: item.passed ? 'rgba(16, 185, 129, 0.08)' : 'rgba(239, 68, 68, 0.08)',
+                    border: `1px solid ${item.passed ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`,
+                    borderRadius: '6px',
+                    padding: '10px 14px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '4px'
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{
+                        fontSize: '12px',
+                        fontWeight: 700,
+                        color: item.passed ? '#10b981' : '#ef4444'
+                      }}>
+                        {item.passed ? '✓ PASS' : '✕ FAIL'}
+                      </span>
+                      <span style={{ fontSize: '12px', fontWeight: 600, color: '#f1f5f9' }}>
+                        [{item.rule.type.toUpperCase()}] {item.rule.target ? `${item.rule.target} ` : ''}{item.rule.operator} {item.rule.expected}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div style={{ fontSize: '11px', color: item.passed ? '#94a3b8' : '#fca5a5' }}>
+                    {item.message}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Stream Timeline Subtab */}
+        {activeTabSub === 'stream' && (
+          <div style={{ flex: 1, padding: '14px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '13px', fontWeight: 700, color: '#c084fc' }}>
+                📡 Luồng Phản Hồi SSE Chunks ({streamChunks.length} gói tin):
+              </span>
+              {streamingActive && (
+                <button
+                  onClick={handleStopStream}
+                  style={{ padding: '3px 10px', borderRadius: '4px', background: '#dc2626', color: '#fff', border: 'none', fontSize: '11px', fontWeight: 600, cursor: 'pointer' }}
+                >
+                  🛑 Dừng Luồng
+                </button>
+              )}
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              {streamChunks.map((chunk, idx) => (
+                <div
+                  key={idx}
+                  style={{
+                    background: '#0d131f',
+                    border: '1px solid #1f293d',
+                    borderRadius: '6px',
+                    padding: '8px 12px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '4px'
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: '#94a3b8' }}>
+                    <span style={{ fontWeight: 600, color: '#38bdf8' }}>Chunk #{chunk.index || idx + 1}</span>
+                    <span>{chunk.timestamp}</span>
+                  </div>
+                  <pre style={{ margin: 0, fontSize: '12px', color: '#e2e8f0', fontFamily: 'var(--font-mono)', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+                    {chunk.data}
+                  </pre>
+                </div>
+              ))}
             </div>
           </div>
         )}
