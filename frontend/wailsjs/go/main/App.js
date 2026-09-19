@@ -54,6 +54,10 @@ export function DeleteScenarioFromDB(arg1) {
   return window['go']['main']['App']['DeleteScenarioFromDB'](arg1);
 }
 
+export function DeleteUIScenario(arg1) {
+  return window['go']['main']['App']['DeleteUIScenario'](arg1);
+}
+
 export function ExecuteLoadTest(arg1, arg2, arg3, arg4, arg5, arg6) {
   return window['go']['main']['App']['ExecuteLoadTest'](arg1, arg2, arg3, arg4, arg5, arg6);
 }
@@ -90,8 +94,36 @@ export function GetScenariosFromDB() {
   return window['go']['main']['App']['GetScenariosFromDB']();
 }
 
+export function GetScreenshotBase64(arg1) {
+  return window['go']['main']['App']['GetScreenshotBase64'](arg1);
+}
+
+export function GetUIScenario(arg1) {
+  return window['go']['main']['App']['GetUIScenario'](arg1);
+}
+
+export function GetUIScenarios() {
+  return window['go']['main']['App']['GetUIScenarios']();
+}
+
+export function GetUITestResults(arg1) {
+  return window['go']['main']['App']['GetUITestResults'](arg1);
+}
+
+export function GetUITestRuns(arg1) {
+  return window['go']['main']['App']['GetUITestRuns'](arg1);
+}
+
 export function GetUpdateStatus() {
   return window['go']['main']['App']['GetUpdateStatus']();
+}
+
+export function InstallPlaywrightBrowsers() {
+  return window['go']['main']['App']['InstallPlaywrightBrowsers']();
+}
+
+export function RunUIScenario(arg1, arg2, arg3) {
+  return window['go']['main']['App']['RunUIScenario'](arg1, arg2, arg3);
 }
 
 export function SaveAllEnvironmentsToDB(arg1) {
@@ -106,6 +138,10 @@ export function SaveScenarioToDB(arg1) {
   return window['go']['main']['App']['SaveScenarioToDB'](arg1);
 }
 
+export function SaveUIScenario(arg1) {
+  return window['go']['main']['App']['SaveUIScenario'](arg1);
+}
+
 export function StartDownloadUpdate(arg1, arg2, arg3) {
   return window['go']['main']['App']['StartDownloadUpdate'](arg1, arg2, arg3);
 }
@@ -116,6 +152,10 @@ export function StartMockServer(arg1, arg2) {
 
 export function StopMockServer() {
   return window['go']['main']['App']['StopMockServer']();
+}
+
+export function StopUIScenario(arg1) {
+  return window['go']['main']['App']['StopUIScenario'](arg1);
 }
 
 export function UpdateFolderInDB(arg1, arg2) {

@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import Sidebar from '../components/Sidebar/Sidebar';
 import Workspace from '../pages/Workspace/Workspace';
 import UpdateModal, { UpdateInfo, UpdatePhase } from '../components/UpdateModal/UpdateModal';
+import UITestModal from '../components/UITestModal/UITestModal';
 
 // Wails-generated bindings
 import {
@@ -24,6 +25,7 @@ interface UpdateStatus {
 export default function MainLayout() {
   const [isEnvModalOpen, setIsEnvModalOpen] = useState(false);
   const [isAutomationModalOpen, setIsAutomationModalOpen] = useState(false);
+  const [isUITestModalOpen, setIsUITestModalOpen] = useState(false);
 
   // ── Update state ──────────────────────────────────────────────────────────
   const [updateInfo, setUpdateInfo]         = useState<UpdateInfo | null>(null);
@@ -138,6 +140,7 @@ export default function MainLayout() {
         <Sidebar
           onOpenEnvModal={() => setIsEnvModalOpen(true)}
           onOpenAutomationModal={() => setIsAutomationModalOpen(true)}
+          onOpenUITestModal={() => setIsUITestModalOpen(true)}
         />
       </div>
 
@@ -154,8 +157,16 @@ export default function MainLayout() {
           setIsEnvModalOpen={setIsEnvModalOpen}
           isAutomationModalOpen={isAutomationModalOpen}
           setIsAutomationModalOpen={setIsAutomationModalOpen}
+          isUITestModalOpen={isUITestModalOpen}
+          setIsUITestModalOpen={setIsUITestModalOpen}
         />
       </div>
+
+      {/* UI Automation Testing Modal */}
+      <UITestModal
+        isOpen={isUITestModalOpen}
+        onClose={() => setIsUITestModalOpen(false)}
+      />
 
       {/* Update Modal — hiển thị khi có bản mới */}
       {showUpdateModal && updateInfo && (

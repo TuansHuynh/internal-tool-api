@@ -8,9 +8,10 @@ import appLogo from '../../assets/images/logo.png';
 interface SidebarProps {
   onOpenEnvModal?: () => void;
   onOpenAutomationModal?: () => void;
+  onOpenUITestModal?: () => void;
 }
 
-export default function Sidebar({ onOpenEnvModal, onOpenAutomationModal }: SidebarProps) {
+export default function Sidebar({ onOpenEnvModal, onOpenAutomationModal, onOpenUITestModal }: SidebarProps) {
   const {
     projects, folders, dbRequests,
     createProject, renameProject, deleteProject,
@@ -663,7 +664,7 @@ export default function Sidebar({ onOpenEnvModal, onOpenAutomationModal }: Sideb
         </div>
       </div>
 
-      {/* Tabs: Collections vs Automation vs History */}
+      {/* Tabs: Collections vs API Automation vs UI Automation vs History */}
       <div style={{
         display: 'flex',
         borderBottom: '1px solid var(--border-subtle)',
@@ -673,47 +674,67 @@ export default function Sidebar({ onOpenEnvModal, onOpenAutomationModal }: Sideb
           onClick={() => setActiveTab('collections')}
           style={{
             flex: 1,
-            padding: '9px 4px',
+            padding: '9px 2px',
             background: activeTab === 'collections' ? 'var(--bg-sidebar)' : 'transparent',
             color: activeTab === 'collections' ? 'var(--color-primary)' : 'var(--text-muted)',
             fontWeight: activeTab === 'collections' ? 600 : 400,
             borderBottom: activeTab === 'collections' ? '2px solid var(--color-primary)' : '2px solid transparent',
-            fontSize: '11.5px',
+            fontSize: '11px',
             cursor: 'pointer'
           }}
         >
-          📁 Collections
+          📁 APIs
         </button>
         <button
           onClick={() => onOpenAutomationModal ? onOpenAutomationModal() : null}
-          title="Mở bộ kiểm thử kịch bản tự động (Automation Test Suite)"
+          title="Mở bộ kiểm thử kịch bản API tự động (API Auto Test)"
           style={{
             flex: 1,
-            padding: '9px 4px',
+            padding: '9px 2px',
             background: 'transparent',
             color: '#38bdf8',
             fontWeight: 600,
             borderBottom: '2px solid transparent',
-            fontSize: '11.5px',
+            fontSize: '11px',
             cursor: 'pointer',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            gap: '3px'
+            gap: '2px'
           }}
         >
-          🤖 Auto Test
+          🤖 API Test
+        </button>
+        <button
+          onClick={() => onOpenUITestModal ? onOpenUITestModal() : null}
+          title="Mở kiểm thử giao diện tự động UI (Playwright Automation Studio)"
+          style={{
+            flex: 1,
+            padding: '9px 2px',
+            background: 'transparent',
+            color: '#a855f7',
+            fontWeight: 700,
+            borderBottom: '2px solid transparent',
+            fontSize: '11px',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '2px'
+          }}
+        >
+          🌐 UI Test
         </button>
         <button
           onClick={() => setActiveTab('history')}
           style={{
             flex: 1,
-            padding: '9px 4px',
+            padding: '9px 2px',
             background: activeTab === 'history' ? 'var(--bg-sidebar)' : 'transparent',
             color: activeTab === 'history' ? 'var(--color-primary)' : 'var(--text-muted)',
             fontWeight: activeTab === 'history' ? 600 : 400,
             borderBottom: activeTab === 'history' ? '2px solid var(--color-primary)' : '2px solid transparent',
-            fontSize: '11.5px',
+            fontSize: '11px',
             cursor: 'pointer'
           }}
         >
@@ -1083,6 +1104,29 @@ export default function Sidebar({ onOpenEnvModal, onOpenAutomationModal }: Sideb
         flexDirection: 'column',
         gap: '6px'
       }}>
+        {onOpenUITestModal && (
+          <button
+            onClick={onOpenUITestModal}
+            title="Mở UI Automation Testing Studio (Playwright Browser Test)"
+            style={{
+              width: '100%',
+              padding: '6px 10px',
+              borderRadius: '6px',
+              background: 'rgba(168, 85, 247, 0.12)',
+              border: '1px solid rgba(168, 85, 247, 0.3)',
+              color: '#c084fc',
+              fontSize: '12px',
+              fontWeight: 700,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '6px',
+              cursor: 'pointer'
+            }}
+          >
+            <span>🌐</span> UI Automation Studio
+          </button>
+        )}
         {onOpenAutomationModal && (
           <button
             onClick={onOpenAutomationModal}
@@ -1103,7 +1147,7 @@ export default function Sidebar({ onOpenEnvModal, onOpenAutomationModal }: Sideb
               cursor: 'pointer'
             }}
           >
-            <span>🤖</span> Automation Test Studio
+            <span>🤖</span> API Auto Test Studio
           </button>
         )}
         {onOpenEnvModal && (

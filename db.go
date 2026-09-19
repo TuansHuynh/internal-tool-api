@@ -68,6 +68,49 @@ type DBScenario struct {
 	Steps       []DBScenarioStep `json:"steps"`
 }
 
+type DBUIStep struct {
+	ID         string `json:"id"`
+	ScenarioID string `json:"scenarioId"`
+	SortOrder  int    `json:"sortOrder"`
+	Type       string `json:"type"`
+	Selector   string `json:"selector"`
+	Value      string `json:"value"`
+	Timeout    int    `json:"timeout"`
+	ConfigJSON string `json:"configJson"`
+	CreatedAt  string `json:"createdAt,omitempty"`
+}
+
+type DBUIScenario struct {
+	ID        string     `json:"id"`
+	ProjectID string     `json:"projectId,omitempty"`
+	FolderID  string     `json:"folderId,omitempty"`
+	Name      string     `json:"name"`
+	Browser   string     `json:"browser"`
+	BaseURL   string     `json:"baseUrl"`
+	CreatedAt string     `json:"createdAt,omitempty"`
+	UpdatedAt string     `json:"updatedAt,omitempty"`
+	Steps     []DBUIStep `json:"steps"`
+}
+
+type DBUITestRun struct {
+	ID         string `json:"id"`
+	ScenarioID string `json:"scenarioId"`
+	Status     string `json:"status"`
+	StartedAt  string `json:"startedAt"`
+	FinishedAt string `json:"finishedAt"`
+	Duration   int64  `json:"duration"`
+}
+
+type DBUITestResult struct {
+	ID             string `json:"id"`
+	RunID          string `json:"runId"`
+	StepID         string `json:"stepId"`
+	Status         string `json:"status"`
+	Error          string `json:"error"`
+	Duration       int64  `json:"duration"`
+	ScreenshotPath string `json:"screenshotPath"`
+}
+
 type DBEnvVariable struct {
 	ID      string `json:"id"`
 	Key     string `json:"key"`
@@ -176,6 +219,47 @@ func InitDB() (*DBManager, error) {
 			assertions_json TEXT DEFAULT '[]',
 			extract_vars_json TEXT DEFAULT '[]',
 			FOREIGN KEY(scenario_id) REFERENCES scenarios(id) ON DELETE CASCADE
+		);`,
+		`CREATE TABLE IF NOT EXISTS ui_scenarios (
+			id TEXT PRIMARY KEY,
+			project_id TEXT DEFAULT '',
+			folder_id TEXT DEFAULT '',
+			name TEXT NOT NULL,
+			browser TEXT DEFAULT 'chromium',
+			base_url TEXT DEFAULT '',
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		);`,
+		`CREATE TABLE IF NOT EXISTS ui_steps (
+			id TEXT PRIMARY KEY,
+			scenario_id TEXT NOT NULL,
+			sort_order INTEGER NOT NULL,
+			type TEXT NOT NULL,
+			selector TEXT DEFAULT '',
+			value TEXT DEFAULT '',
+			timeout INTEGER DEFAULT 5000,
+			config_json TEXT DEFAULT '{}',
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			FOREIGN KEY(scenario_id) REFERENCES ui_scenarios(id) ON DELETE CASCADE
+		);`,
+		`CREATE TABLE IF NOT EXISTS ui_test_runs (
+			id TEXT PRIMARY KEY,
+			scenario_id TEXT NOT NULL,
+			status TEXT NOT NULL,
+			started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			finished_at DATETIME,
+			duration INTEGER DEFAULT 0,
+			FOREIGN KEY(scenario_id) REFERENCES ui_scenarios(id) ON DELETE CASCADE
+		);`,
+		`CREATE TABLE IF NOT EXISTS ui_test_results (
+			id TEXT PRIMARY KEY,
+			run_id TEXT NOT NULL,
+			step_id TEXT NOT NULL,
+			status TEXT NOT NULL,
+			error TEXT DEFAULT '',
+			duration INTEGER DEFAULT 0,
+			screenshot_path TEXT DEFAULT '',
+			FOREIGN KEY(run_id) REFERENCES ui_test_runs(id) ON DELETE CASCADE
 		);`,
 	}
 
@@ -680,4 +764,236 @@ func (m *DBManager) DeleteScenario(id string) error {
 		return err
 	}
 	return tx.Commit()
+}
+
+// ==========================================
+// UI AUTOMATION SCENARIOS & RUNS CRUD
+// ==========================================
+
+func (m *DBManager) GetUIScenarios() ([]DBUIScenario, error) {
+	rows, err := m.db.Query("SELECT id, project_id, folder_id, name, browser, base_url, created_at, updated_at FROM ui_scenarios ORDER BY created_at DESC")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var scenarios []DBUIScenario
+	for rows.Next() {
+		var s DBUIScenario
+		var createdAt, updatedAt sql.NullString
+		if err := rows.Scan(&s.ID, &s.ProjectID, &s.FolderID, &s.Name, &s.Browser, &s.BaseURL, &createdAt, &updatedAt); err != nil {
+			return nil, err
+		}
+		s.CreatedAt = createdAt.String
+		s.UpdatedAt = updatedAt.String
+		scenarios = append(scenarios, s)
+	}
+
+	for i := range scenarios {
+		stepRows, err := m.db.Query(`
+			SELECT id, scenario_id, sort_order, type, selector, value, timeout, config_json, created_at
+			FROM ui_steps
+			WHERE scenario_id = ?
+			ORDER BY sort_order ASC
+		`, scenarios[i].ID)
+		if err != nil {
+			continue
+		}
+
+		var steps []DBUIStep
+		for stepRows.Next() {
+			var st DBUIStep
+			var createdAt sql.NullString
+			if err := stepRows.Scan(&st.ID, &st.ScenarioID, &st.SortOrder, &st.Type, &st.Selector, &st.Value, &st.Timeout, &st.ConfigJSON, &createdAt); err == nil {
+				st.CreatedAt = createdAt.String
+				steps = append(steps, st)
+			}
+		}
+		stepRows.Close()
+		scenarios[i].Steps = steps
+	}
+
+	return scenarios, nil
+}
+
+func (m *DBManager) GetUIScenario(id string) (*DBUIScenario, error) {
+	row := m.db.QueryRow("SELECT id, project_id, folder_id, name, browser, base_url, created_at, updated_at FROM ui_scenarios WHERE id = ?", id)
+	var s DBUIScenario
+	var createdAt, updatedAt sql.NullString
+	if err := row.Scan(&s.ID, &s.ProjectID, &s.FolderID, &s.Name, &s.Browser, &s.BaseURL, &createdAt, &updatedAt); err != nil {
+		return nil, err
+	}
+	s.CreatedAt = createdAt.String
+	s.UpdatedAt = updatedAt.String
+
+	stepRows, err := m.db.Query(`
+		SELECT id, scenario_id, sort_order, type, selector, value, timeout, config_json, created_at
+		FROM ui_steps
+		WHERE scenario_id = ?
+		ORDER BY sort_order ASC
+	`, s.ID)
+	if err == nil {
+		var steps []DBUIStep
+		for stepRows.Next() {
+			var st DBUIStep
+			var cAt sql.NullString
+			if err := stepRows.Scan(&st.ID, &st.ScenarioID, &st.SortOrder, &st.Type, &st.Selector, &st.Value, &st.Timeout, &st.ConfigJSON, &cAt); err == nil {
+				st.CreatedAt = cAt.String
+				steps = append(steps, st)
+			}
+		}
+		stepRows.Close()
+		s.Steps = steps
+	}
+
+	return &s, nil
+}
+
+func (m *DBManager) SaveUIScenario(s DBUIScenario) error {
+	tx, err := m.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if s.Browser == "" {
+		s.Browser = "chromium"
+	}
+
+	_, err = tx.Exec(`
+		INSERT INTO ui_scenarios (id, project_id, folder_id, name, browser, base_url, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+		ON CONFLICT(id) DO UPDATE SET
+			project_id = excluded.project_id,
+			folder_id = excluded.folder_id,
+			name = excluded.name,
+			browser = excluded.browser,
+			base_url = excluded.base_url,
+			updated_at = CURRENT_TIMESTAMP
+	`, s.ID, s.ProjectID, s.FolderID, s.Name, s.Browser, s.BaseURL)
+	if err != nil {
+		return err
+	}
+
+	if _, err := tx.Exec("DELETE FROM ui_steps WHERE scenario_id = ?", s.ID); err != nil {
+		return err
+	}
+
+	for idx, st := range s.Steps {
+		sortOrder := st.SortOrder
+		if sortOrder <= 0 {
+			sortOrder = idx + 1
+		}
+		timeout := st.Timeout
+		if timeout <= 0 {
+			timeout = 5000
+		}
+		cfg := st.ConfigJSON
+		if cfg == "" {
+			cfg = "{}"
+		}
+
+		_, err = tx.Exec(`
+			INSERT INTO ui_steps (id, scenario_id, sort_order, type, selector, value, timeout, config_json)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		`, st.ID, s.ID, sortOrder, st.Type, st.Selector, st.Value, timeout, cfg)
+		if err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit()
+}
+
+func (m *DBManager) DeleteUIScenario(id string) error {
+	tx, err := m.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.Exec("DELETE FROM ui_steps WHERE scenario_id = ?", id); err != nil {
+		return err
+	}
+	if _, err := tx.Exec("DELETE FROM ui_scenarios WHERE id = ?", id); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func (m *DBManager) SaveUITestRun(run DBUITestRun, results []DBUITestResult) error {
+	tx, err := m.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	_, err = tx.Exec(`
+		INSERT INTO ui_test_runs (id, scenario_id, status, started_at, finished_at, duration)
+		VALUES (?, ?, ?, ?, ?, ?)
+		ON CONFLICT(id) DO UPDATE SET
+			status = excluded.status,
+			finished_at = excluded.finished_at,
+			duration = excluded.duration
+	`, run.ID, run.ScenarioID, run.Status, run.StartedAt, run.FinishedAt, run.Duration)
+	if err != nil {
+		return err
+	}
+
+	for _, res := range results {
+		_, err = tx.Exec(`
+			INSERT INTO ui_test_results (id, run_id, step_id, status, error, duration, screenshot_path)
+			VALUES (?, ?, ?, ?, ?, ?, ?)
+		`, res.ID, run.ID, res.StepID, res.Status, res.Error, res.Duration, res.ScreenshotPath)
+		if err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit()
+}
+
+func (m *DBManager) GetUITestRuns(scenarioID string) ([]DBUITestRun, error) {
+	rows, err := m.db.Query(`
+		SELECT id, scenario_id, status, started_at, COALESCE(finished_at, ''), duration
+		FROM ui_test_runs
+		WHERE scenario_id = ?
+		ORDER BY started_at DESC
+		LIMIT 20
+	`, scenarioID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var runs []DBUITestRun
+	for rows.Next() {
+		var r DBUITestRun
+		if err := rows.Scan(&r.ID, &r.ScenarioID, &r.Status, &r.StartedAt, &r.FinishedAt, &r.Duration); err == nil {
+			runs = append(runs, r)
+		}
+	}
+	return runs, nil
+}
+
+func (m *DBManager) GetUITestResults(runID string) ([]DBUITestResult, error) {
+	rows, err := m.db.Query(`
+		SELECT id, run_id, step_id, status, error, duration, screenshot_path
+		FROM ui_test_results
+		WHERE run_id = ?
+		ORDER BY id ASC
+	`, runID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var results []DBUITestResult
+	for rows.Next() {
+		var res DBUITestResult
+		if err := rows.Scan(&res.ID, &res.RunID, &res.StepID, &res.Status, &res.Error, &res.Duration, &res.ScreenshotPath); err == nil {
+			results = append(results, res)
+		}
+	}
+	return results, nil
 }

@@ -3,6 +3,7 @@
 import {updater} from '../models';
 import {core} from '../models';
 import {main} from '../models';
+import {ui} from '../models';
 
 export function ApplyUpdate():Promise<void>;
 
@@ -30,6 +31,8 @@ export function DeleteRequestInDB(arg1:string):Promise<void>;
 
 export function DeleteScenarioFromDB(arg1:string):Promise<void>;
 
+export function DeleteUIScenario(arg1:string):Promise<void>;
+
 export function ExecuteLoadTest(arg1:core.RequestPayload,arg2:number,arg3:number,arg4:number,arg5:number,arg6:number):Promise<core.StressTestResult>;
 
 export function ExecuteRequest(arg1:core.RequestPayload):Promise<core.ResponsePayload>;
@@ -48,7 +51,21 @@ export function GetMockServerStatus():Promise<core.MockServerStatus>;
 
 export function GetScenariosFromDB():Promise<Array<main.DBScenario>>;
 
+export function GetScreenshotBase64(arg1:string):Promise<string>;
+
+export function GetUIScenario(arg1:string):Promise<main.DBUIScenario>;
+
+export function GetUIScenarios():Promise<Array<main.DBUIScenario>>;
+
+export function GetUITestResults(arg1:string):Promise<Array<main.DBUITestResult>>;
+
+export function GetUITestRuns(arg1:string):Promise<Array<main.DBUITestRun>>;
+
 export function GetUpdateStatus():Promise<main.UpdateStatus>;
+
+export function InstallPlaywrightBrowsers():Promise<void>;
+
+export function RunUIScenario(arg1:string,arg2:string,arg3:boolean):Promise<ui.TestRunSummary>;
 
 export function SaveAllEnvironmentsToDB(arg1:Array<main.DBEnvironment>):Promise<void>;
 
@@ -56,11 +73,15 @@ export function SaveEnvironmentToDB(arg1:main.DBEnvironment):Promise<void>;
 
 export function SaveScenarioToDB(arg1:main.DBScenario):Promise<void>;
 
+export function SaveUIScenario(arg1:main.DBUIScenario):Promise<void>;
+
 export function StartDownloadUpdate(arg1:string,arg2:string,arg3:string):Promise<void>;
 
 export function StartMockServer(arg1:number,arg2:Array<core.MockRoute>):Promise<void>;
 
 export function StopMockServer():Promise<void>;
+
+export function StopUIScenario(arg1:string):Promise<void>;
 
 export function UpdateFolderInDB(arg1:string,arg2:string):Promise<void>;
 

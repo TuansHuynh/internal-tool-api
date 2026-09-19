@@ -12,13 +12,17 @@ interface WorkspaceProps {
   setIsEnvModalOpen?: (open: boolean) => void;
   isAutomationModalOpen?: boolean;
   setIsAutomationModalOpen?: (open: boolean) => void;
+  isUITestModalOpen?: boolean;
+  setIsUITestModalOpen?: (open: boolean) => void;
 }
 
 export default function Workspace({
   isEnvModalOpen,
   setIsEnvModalOpen,
   isAutomationModalOpen,
-  setIsAutomationModalOpen
+  setIsAutomationModalOpen,
+  isUITestModalOpen,
+  setIsUITestModalOpen
 }: WorkspaceProps) {
   const { 
     tabs, activeTabId, setActiveTabId, createNewTab, closeTab, activeTab, reorderTabs
@@ -29,6 +33,7 @@ export default function Workspace({
   const [isMockModalOpen, setIsMockModalOpen] = useState(false);
   const [localEnvOpen, setLocalEnvOpen] = useState(false);
   const [localAutoOpen, setLocalAutoOpen] = useState(false);
+  const [localUIAutoOpen, setLocalUIAutoOpen] = useState(false);
 
   // Vertical Resizable Splitter State
   const [requestPanelHeight, setRequestPanelHeight] = useState<number>(310);
@@ -41,6 +46,9 @@ export default function Workspace({
 
   const isAutoOpen = isAutomationModalOpen !== undefined ? isAutomationModalOpen : localAutoOpen;
   const setAutoOpen = setIsAutomationModalOpen || setLocalAutoOpen;
+
+  const isUIAutoOpen = isUITestModalOpen !== undefined ? isUITestModalOpen : localUIAutoOpen;
+  const setUIAutoOpen = setIsUITestModalOpen || setLocalUIAutoOpen;
 
   const handleDragStart = (e: React.DragEvent, index: number) => {
     e.dataTransfer.effectAllowed = 'move';

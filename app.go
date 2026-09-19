@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"internal-api-client/core"
+	coreui "internal-api-client/core/ui"
 	"internal-api-client/internal/updater"
 	"log"
 	"os"
@@ -80,6 +81,10 @@ type App struct {
 	streamCancels map[string]context.CancelFunc
 
 	mockServer *core.MockServerEngine
+
+	uiEngine      *coreui.BrowserEngine
+	screenshotMgr *coreui.ScreenshotManager
+	uiRunner      *coreui.Runner
 }
 
 func NewApp() *App {
@@ -87,12 +92,19 @@ func NewApp() *App {
 	if err != nil {
 		println("Error initializing SQLite database:", err.Error())
 	}
+	uiEngine := coreui.NewBrowserEngine()
+	screenshotMgr := coreui.NewScreenshotManager()
+	uiRunner := coreui.NewRunner(uiEngine, screenshotMgr)
+
 	return &App{
 		engine:        core.NewHttpClientEngine(true, 30),
 		dbManager:     dbm,
 		downloadPhase: "idle",
 		streamCancels: make(map[string]context.CancelFunc),
 		mockServer:    core.NewMockServerEngine(),
+		uiEngine:      uiEngine,
+		screenshotMgr: screenshotMgr,
+		uiRunner:      uiRunner,
 	}
 }
 
@@ -524,4 +536,158 @@ func (a *App) ExportFullWorkspace() (string, error) {
 		return "", err
 	}
 	return string(b), nil
+}
+
+// ─── UI Automation Testing API (Wails-bound methods) ──────────────────────────
+
+func (a *App) GetUIScenarios() ([]DBUIScenario, error) {
+	if a.dbManager == nil {
+		return nil, nil
+	}
+	return a.dbManager.GetUIScenarios()
+}
+
+func (a *App) GetUIScenario(id string) (*DBUIScenario, error) {
+	if a.dbManager == nil {
+		return nil, fmt.Errorf("database not initialized")
+	}
+	return a.dbManager.GetUIScenario(id)
+}
+
+func (a *App) SaveUIScenario(scenario DBUIScenario) error {
+	if a.dbManager == nil {
+		return fmt.Errorf("database not initialized")
+	}
+	return a.dbManager.SaveUIScenario(scenario)
+}
+
+func (a *App) DeleteUIScenario(id string) error {
+	if a.dbManager == nil {
+		return fmt.Errorf("database not initialized")
+	}
+	return a.dbManager.DeleteUIScenario(id)
+}
+
+func (a *App) RunUIScenario(scenarioID string, envID string, headless bool) (coreui.TestRunSummary, error) {
+	if a.dbManager == nil {
+		return coreui.TestRunSummary{}, fmt.Errorf("database not initialized")
+	}
+	if a.uiRunner == nil {
+		return coreui.TestRunSummary{}, fmt.Errorf("UI test runner not initialized")
+	}
+
+	dbScenario, err := a.dbManager.GetUIScenario(scenarioID)
+	if err != nil {
+		return coreui.TestRunSummary{}, fmt.Errorf("failed to load scenario %s: %w", scenarioID, err)
+	}
+
+	// Map DB model to coreui.UIScenario
+	uiSteps := make([]coreui.UIStep, len(dbScenario.Steps))
+	for i, st := range dbScenario.Steps {
+		uiSteps[i] = coreui.UIStep{
+			ID:         st.ID,
+			ScenarioID: st.ScenarioID,
+			SortOrder:  st.SortOrder,
+			Type:       coreui.StepType(st.Type),
+			Selector:   st.Selector,
+			Value:      st.Value,
+			Timeout:    st.Timeout,
+			ConfigJSON: st.ConfigJSON,
+		}
+	}
+
+	scenario := coreui.UIScenario{
+		ID:        dbScenario.ID,
+		ProjectID: dbScenario.ProjectID,
+		FolderID:  dbScenario.FolderID,
+		Name:      dbScenario.Name,
+		Browser:   coreui.BrowserType(dbScenario.Browser),
+		BaseURL:   dbScenario.BaseURL,
+		Steps:     uiSteps,
+	}
+
+	// Collect active environment variables
+	envVars := make(map[string]string)
+	if envID != "" {
+		envs, err := a.dbManager.GetEnvironments()
+		if err == nil {
+			for _, env := range envs {
+				if env.ID == envID {
+					for _, v := range env.Variables {
+						if v.Enabled && strings.TrimSpace(v.Key) != "" {
+							envVars[strings.TrimSpace(v.Key)] = v.Value
+						}
+					}
+					break
+				}
+			}
+		}
+	}
+
+	// Run with progress callback emitting Wails events
+	summary := a.uiRunner.RunScenario(context.Background(), scenario, envVars, headless, func(event coreui.StepProgressEvent) {
+		if a.ctx != nil {
+			wailsRuntime.EventsEmit(a.ctx, "uitest:progress:"+scenarioID, event)
+			wailsRuntime.EventsEmit(a.ctx, "uitest:progress", event)
+		}
+	})
+
+	// Persist test run and results in SQLite
+	runRecord := DBUITestRun{
+		ID:         summary.RunID,
+		ScenarioID: summary.ScenarioID,
+		Status:     string(summary.Status),
+		StartedAt:  summary.StartedAt.Format("2006-01-02 15:04:05"),
+		FinishedAt: summary.FinishedAt.Format("2006-01-02 15:04:05"),
+		Duration:   summary.DurationMs,
+	}
+	resultsRecords := make([]DBUITestResult, len(summary.StepResults))
+	for i, res := range summary.StepResults {
+		resultsRecords[i] = DBUITestResult{
+			ID:             fmt.Sprintf("res_%s_%d", summary.RunID, i+1),
+			RunID:          summary.RunID,
+			StepID:         res.StepID,
+			Status:         string(res.Status),
+			Error:          res.Error,
+			Duration:       res.DurationMs,
+			ScreenshotPath: res.ScreenshotPath,
+		}
+	}
+	_ = a.dbManager.SaveUITestRun(runRecord, resultsRecords)
+
+	return summary, nil
+}
+
+func (a *App) StopUIScenario(scenarioID string) {
+	if a.uiRunner != nil {
+		a.uiRunner.CancelRun(scenarioID)
+	}
+}
+
+func (a *App) GetUITestRuns(scenarioID string) ([]DBUITestRun, error) {
+	if a.dbManager == nil {
+		return nil, nil
+	}
+	return a.dbManager.GetUITestRuns(scenarioID)
+}
+
+func (a *App) GetUITestResults(runID string) ([]DBUITestResult, error) {
+	if a.dbManager == nil {
+		return nil, nil
+	}
+	return a.dbManager.GetUITestResults(runID)
+}
+
+func (a *App) GetScreenshotBase64(path string) (string, error) {
+	if a.screenshotMgr == nil {
+		a.screenshotMgr = coreui.NewScreenshotManager()
+	}
+	return a.screenshotMgr.ReadScreenshotAsBase64(path)
+}
+
+func (a *App) InstallPlaywrightBrowsers() error {
+	if a.uiEngine == nil {
+		a.uiEngine = coreui.NewBrowserEngine()
+	}
+	return a.uiEngine.InstallBrowsers()
 }
